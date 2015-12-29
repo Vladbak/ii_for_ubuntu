@@ -1,11 +1,11 @@
-set(TARGET_NAME interface)
+set(TARGET_NAME InfinityIsland)
 project(${TARGET_NAME})
 
 # set a default root dir for each of our optional externals if it was not passed
-set(OPTIONAL_EXTERNALS "LeapMotion")
+#set(OPTIONAL_EXTERNALS "LeapMotion")
 
 if(WIN32)
-    list(APPEND OPTIONAL_EXTERNALS "3DConnexionClient")
+#    list(APPEND OPTIONAL_EXTERNALS "3DConnexionClient")
 endif()
 
 foreach(EXTERNAL ${OPTIONAL_EXTERNALS})
@@ -67,14 +67,10 @@ if (APPLE)
   # configure CMake to use a custom Info.plist
   SET_TARGET_PROPERTIES( ${this_target} PROPERTIES MACOSX_BUNDLE_INFO_PLIST MacOSXBundleInfo.plist.in )
 
-  set(MACOSX_BUNDLE_BUNDLE_NAME Interface)
-  set(MACOSX_BUNDLE_GUI_IDENTIFIER io.highfidelity.Interface)
+  set(MACOSX_BUNDLE_BUNDLE_NAME InfinityIsland)
+  set(MACOSX_BUNDLE_GUI_IDENTIFIER com.e-spaces.InfinityIsland)
   
-  if (UPPER_CMAKE_BUILD_TYPE MATCHES RELEASE OR UPPER_CMAKE_BUILD_TYPE MATCHES RELWITHDEBINFO)
-    set(ICON_FILENAME "interface.icns")
-  else ()
-    set(ICON_FILENAME "interface-beta.icns")
-  endif ()
+  set(ICON_FILENAME "UTII.icns")
   
   # set how the icon shows up in the Info.plist file
   SET(MACOSX_BUNDLE_ICON_FILE "${ICON_FILENAME}")

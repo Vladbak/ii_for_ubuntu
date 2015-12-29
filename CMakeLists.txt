@@ -233,5 +233,5 @@ if (HIFI_MEMORY_DEBUGGING)
   endif (UNIX)
 endif ()
 
-include_application_version()
-generate_installers()
+include_application_version_UTII()
+generate_installers_UTII()
