@@ -1,5 +1,4 @@
 set(TARGET_NAME interface)
-set(TARGET_NAME_OUTPUT InfinityIsland)
 project(${TARGET_NAME})
 
 # set a default root dir for each of our optional externals if it was not passed
@@ -92,12 +91,18 @@ endif()
 
 # create the executable, make it a bundle on OS X
 if (APPLE)
-  add_executable(${TARGET_NAME_OUTPUT} MACOSX_BUNDLE ${INTERFACE_SRCS} ${QM})
+  add_executable(${TARGET_NAME} MACOSX_BUNDLE ${INTERFACE_SRCS} ${QM})
 elseif(WIN32)
-  add_executable(${TARGET_NAME_OUTPUT} WIN32 ${INTERFACE_SRCS} ${QM})
+  add_executable(${TARGET_NAME} WIN32 ${INTERFACE_SRCS} ${QM})
 else()
-  add_executable(${TARGET_NAME_OUTPUT} ${INTERFACE_SRCS} ${QM})
+  add_executable(${TARGET_NAME} ${INTERFACE_SRCS} ${QM})
 endif()
+
+set_target_properties(
+    ${TARGET_NAME}
+    PROPERTIES 
+      OUTPUT_NAME "InfinityIsland"
+)
 
 # These are external plugins, but we need to do the 'add dependency' here so that their 
 # binary directories get added to the fixup path
@@ -112,7 +117,7 @@ add_dependency_external_projects(sdl2)
 # This will prevent the following linker warnings
 # LINK : warning LNK4075: ignoring '/INCREMENTAL' due to '/OPT:ICF' specification
 if (WIN32)
-  set_property(TARGET ${TARGET_NAME_OUTPUT} APPEND_STRING PROPERTY LINK_FLAGS_DEBUG "/OPT:NOREF /OPT:NOICF")
+  set_property(TARGET ${TARGET_NAME} APPEND_STRING PROPERTY LINK_FLAGS_DEBUG "/OPT:NOREF /OPT:NOICF")
 endif()
 
 # link required hifi libraries
@@ -127,9 +132,9 @@ target_bullet()
 target_glew()
 target_opengl()
 
-if (WIN32 OR APPLE)
-    target_faceshift()
-endif()
+#if (WIN32 OR APPLE)
+#    target_faceshift()
+#endif()
 
 # perform standard include and linking for found externals
 foreach(EXTERNAL ${OPTIONAL_EXTERNALS})
@@ -162,7 +167,7 @@ foreach(EXTERNAL ${OPTIONAL_EXTERNALS})
     endif ()
     
     if (NOT APPLE OR NOT ${${EXTERNAL}_UPPERCASE} MATCHES "SIXENSE")
-      target_link_libraries(${TARGET_NAME_OUTPUT} ${${${EXTERNAL}_UPPERCASE}_LIBRARIES})
+      target_link_libraries(${TARGET_NAME} ${${${EXTERNAL}_UPPERCASE}_LIBRARIES})
     elseif (APPLE AND NOT INSTALLER_BUILD)
       add_definitions(-DSIXENSE_LIB_FILENAME=\"${${${EXTERNAL}_UPPERCASE}_LIBRARY_RELEASE}\")
     endif ()
@@ -173,7 +178,7 @@ endforeach()
 include_directories("${PROJECT_SOURCE_DIR}/src")
 
 target_link_libraries(
-  ${TARGET_NAME_OUTPUT}
+  ${TARGET_NAME}
   Qt5::Gui Qt5::Network Qt5::Multimedia Qt5::OpenGL 
   Qt5::Qml Qt5::Quick Qt5::Script Qt5::Svg 
   Qt5::WebChannel Qt5::WebEngine Qt5::WebEngineWidgets Qt5::WebKitWidgets
@@ -193,24 +198,24 @@ if (APPLE)
   find_library(OpenGL OpenGL)
   find_library(AppKit AppKit)
 
-  target_link_libraries(${TARGET_NAME_OUTPUT} ${OpenGL} ${AppKit})
+  target_link_libraries(${TARGET_NAME} ${OpenGL} ${AppKit})
     
   # install command for OS X bundle
-  INSTALL(TARGETS ${TARGET_NAME_OUTPUT}
+  INSTALL(TARGETS ${TARGET_NAME}
     BUNDLE DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/install" COMPONENT Runtime
     RUNTIME DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/install" COMPONENT Runtime
   )
 else (APPLE)
   # copy the resources files beside the executable
-  add_custom_command(TARGET ${TARGET_NAME_OUTPUT} POST_BUILD
+  add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_directory
     "${PROJECT_SOURCE_DIR}/resources"
-    $<TARGET_FILE_DIR:${TARGET_NAME_OUTPUT}>/resources
+    $<TARGET_FILE_DIR:${TARGET_NAME}>/resources
   )
 
   # link target to external libraries
   if (WIN32)
-    target_link_libraries(${TARGET_NAME_OUTPUT} wsock32.lib Winmm.lib)
+    target_link_libraries(${TARGET_NAME} wsock32.lib Winmm.lib)
   else (WIN32)
     # Nothing else required on linux apparently
   endif()
