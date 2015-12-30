@@ -27,7 +27,7 @@
 
 Q_DECLARE_METATYPE(DataServerAccountInfo)
 
-static const QString RUNNING_MARKER_FILENAME = "Interface.running";
+static const QString RUNNING_MARKER_FILENAME = "InfinityIsland.running";
 
 void CrashHandler::checkForAndHandleCrash() {
     QFile runningMarkerFile(runningMarkerFilePath());

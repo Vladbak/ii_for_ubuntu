@@ -72,7 +72,7 @@ namespace Setting {
         QObject::connect(thread, SIGNAL(finished()), thread, SLOT(deleteLater()));
         privateInstance->moveToThread(thread);
         thread->start();
-        qCDebug(shared) << "Settings thread started.";    
+        qCDebug(shared) << "Settings thread started.";
 
         // Register cleanupPrivateInstance to run inside QCoreApplication's destructor.
         qAddPostRoutine(cleanupPrivateInstance);

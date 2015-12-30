@@ -190,7 +190,7 @@ static const float MIRROR_FIELD_OF_VIEW = 30.0f;
 
 static const quint64 TOO_LONG_SINCE_LAST_SEND_DOWNSTREAM_AUDIO_STATS = 1 * USECS_PER_SECOND;
 
-static const QString INFO_HELP_PATH = "html/interface-welcome.html";
+static const QString INFO_HELP_PATH = "html/utii-welcome.html";
 static const QString INFO_EDIT_ENTITIES_PATH = "html/edit-commands.html";
 
 static const unsigned int THROTTLED_SIM_FRAMERATE = 15;
@@ -205,7 +205,7 @@ static const QString DESKTOP_LOCATION = QStandardPaths::writableLocation(QStanda
 static const QString DESKTOP_LOCATION = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation).append("/script.js");
 #endif
 
-const QString DEFAULT_SCRIPTS_JS_URL = "http://s3.amazonaws.com/hifi-public/scripts/defaultScripts.js";
+const QString DEFAULT_SCRIPTS_JS_URL = "http://hifi-assets.e-spaces.com/scripts/defaultScripts.js";
 Setting::Handle<int> maxOctreePacketsPerSecond("maxOctreePPS", DEFAULT_MAX_OCTREE_PPS);
 
 const QHash<QString, Application::AcceptURLMethod> Application::_acceptedExtensions {
@@ -428,7 +428,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     qInstallMessageHandler(messageHandler);
 
     QFontDatabase::addApplicationFont(PathUtils::resourcesPath() + "styles/Inconsolata.otf");
-    _window->setWindowTitle("Interface");
+    _window->setWindowTitle("Infinity Island");
 
     Model::setAbstractViewStateInterface(this); // The model class will sometimes need to know view state details from us
 
