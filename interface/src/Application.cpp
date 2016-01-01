@@ -808,9 +808,9 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     setActiveEyeTracker();
 #endif
 
-    auto applicationUpdater = DependencyManager::get<AutoUpdater>();
-    connect(applicationUpdater.data(), &AutoUpdater::newVersionIsAvailable, dialogsManager.data(), &DialogsManager::showUpdateDialog);
-    applicationUpdater->checkForUpdate();
+    //auto applicationUpdater = DependencyManager::get<AutoUpdater>();
+    //connect(applicationUpdater.data(), &AutoUpdater::newVersionIsAvailable, dialogsManager.data(), &DialogsManager::showUpdateDialog);
+    //applicationUpdater->checkForUpdate();
 
     // Now that menu is initalized we can sync myAvatar with it's state.
     getMyAvatar()->updateMotionBehaviorFromMenu();
