@@ -558,12 +558,13 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     // connect to appropriate slots on AccountManager
     AccountManager& accountManager = AccountManager::getInstance();
 
-    const qint64 BALANCE_UPDATE_INTERVAL_MSECS = 5 * 1000;
+    //UTII: we dont need to keep track of the account balance
+    //const qint64 BALANCE_UPDATE_INTERVAL_MSECS = 5 * 1000;
 
-    connect(&balanceUpdateTimer, &QTimer::timeout, &accountManager, &AccountManager::updateBalance);
-    balanceUpdateTimer.start(BALANCE_UPDATE_INTERVAL_MSECS);
+    //connect(&balanceUpdateTimer, &QTimer::timeout, &accountManager, &AccountManager::updateBalance);
+    //balanceUpdateTimer.start(BALANCE_UPDATE_INTERVAL_MSECS);
 
-    connect(&accountManager, &AccountManager::balanceChanged, this, &Application::updateWindowTitle);
+    //connect(&accountManager, &AccountManager::balanceChanged, this, &Application::updateWindowTitle);
 
     auto dialogsManager = DependencyManager::get<DialogsManager>();
     connect(&accountManager, &AccountManager::authRequired, dialogsManager.data(), &DialogsManager::showLoginDialog);
