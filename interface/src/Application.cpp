@@ -145,6 +145,7 @@
 #include "ui/DataWebDialog.h"
 #include "ui/DialogsManager.h"
 #include "ui/LoginDialog.h"
+#include "ui/LoadingScreen.h"
 #include "ui/overlays/Cube3DOverlay.h"
 #include "ui/Snapshot.h"
 #include "ui/StandAloneJSConsole.h"
@@ -887,6 +888,8 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     connect(this, &Application::applicationStateChanged, this, &Application::activeChanged);
 
     qCDebug(interfaceapp, "Startup time: %4.2f seconds.", (double)startupTimer.elapsed() / 1000.0);
+
+    LoadingScreen::show();
 }
 
 void Application::aboutToQuit() {
@@ -1088,6 +1091,7 @@ void Application::initializeUi() {
     VrMenu::registerType();
     Tooltip::registerType();
     UpdateDialog::registerType();
+    LoadingScreen::registerType();
 
     auto offscreenUi = DependencyManager::get<OffscreenUi>();
     offscreenUi->create(_offscreenContext->getContext());

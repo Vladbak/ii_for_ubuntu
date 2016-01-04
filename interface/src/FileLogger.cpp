@@ -22,7 +22,7 @@
 
 #include "HifiSockAddr.h"
 
-static const QString FILENAME_FORMAT = "hifi-log_%1_%2.txt";
+static const QString FILENAME_FORMAT = "utii-log_%1_%2.txt";
 static const QString DATETIME_FORMAT = "yyyy-MM-dd_hh.mm.ss";
 static const QString LOGS_DIRECTORY = "Logs";
 // Max log size is 1 MB
@@ -39,7 +39,7 @@ QString getLogRollerFilename() {
 }
 
 const QString& getLogFilename() {
-    static QString fileName = FileUtils::standardPath(LOGS_DIRECTORY) + "hifi-log.txt";
+    static QString fileName = FileUtils::standardPath(LOGS_DIRECTORY) + "utii-log.txt";
     return fileName;
 }
 
