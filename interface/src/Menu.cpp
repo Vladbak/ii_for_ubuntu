@@ -96,7 +96,7 @@ Menu::Menu() {
                                                         addressManager.data(),
                                                         SLOT(goBack()),
                                                         QAction::NoRole,
-                                                        -1,
+                                                        UNSPECIFIED_POSITION,
                                                         QString(),
                                                         ItemAccessRoles::Admin);
 
@@ -106,7 +106,7 @@ Menu::Menu() {
                                                            addressManager.data(),
                                                            SLOT(goForward()),
                                                            QAction::NoRole,
-                                                           -1,
+                                                           UNSPECIFIED_POSITION,
                                                            QString(),
                                                            ItemAccessRoles::Admin);
 
@@ -127,7 +127,7 @@ Menu::Menu() {
                                   dialogsManager.data(),
                                   SLOT(toggleAddressBar()),
                                   QAction::NoRole,
-                                  -1,
+                                  UNSPECIFIED_POSITION,
                                   QString(),
                                   (ItemAccessRoles) (ItemAccessRoles::THERankAndFile | ItemAccessRoles::THETrainers));
     addActionToQMenuAndActionHash(fileMenu, MenuOption::CopyAddress, 0,
@@ -150,11 +150,11 @@ Menu::Menu() {
     QUndoStack* undoStack = qApp->getUndoStack();
     QAction* undoAction = undoStack->createUndoAction(editMenu);
     undoAction->setShortcut(Qt::CTRL | Qt::Key_Z);
-    addActionToQMenuAndActionHash(editMenu, undoAction, QString(), 0, QAction::NoRole, -1, QString(), ItemAccessRoles::Admin);
+    addActionToQMenuAndActionHash(editMenu, undoAction, QString(), 0, QAction::NoRole, UNSPECIFIED_POSITION, QString(), ItemAccessRoles::Admin);
 
     QAction* redoAction = undoStack->createRedoAction(editMenu);
     redoAction->setShortcut(Qt::CTRL | Qt::SHIFT | Qt::Key_Z);
-    addActionToQMenuAndActionHash(editMenu, redoAction, QString(), 0, QAction::NoRole, -1, QString(), ItemAccessRoles::Admin);
+    addActionToQMenuAndActionHash(editMenu, redoAction, QString(), 0, QAction::NoRole, UNSPECIFIED_POSITION, QString(), ItemAccessRoles::Admin);
 
     addActionToQMenuAndActionHash(editMenu,
                                   MenuOption::Preferences,
@@ -165,12 +165,12 @@ Menu::Menu() {
 
     addActionToQMenuAndActionHash(editMenu, MenuOption::Attachments, 0,
                                   dialogsManager.data(), SLOT(editAttachments()),
-                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
+                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
 
     MenuWrapper* toolsMenu = addMenu("Tools");
     addActionToQMenuAndActionHash(toolsMenu, MenuOption::ScriptEditor,  Qt::ALT | Qt::Key_S,
                                   dialogsManager.data(), SLOT(showScriptEditor()),
-                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
+                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
 
 #if defined(Q_OS_MAC) || defined(Q_OS_WIN)
     auto speechRecognizer = DependencyManager::get<SpeechRecognizer>();
@@ -179,15 +179,15 @@ Menu::Menu() {
                                                                              speechRecognizer->getEnabled(),
                                                                              speechRecognizer.data(),
                                                                              SLOT(setEnabled(bool)),
-                                                                             UNSPECIFIED_POSITION, "Advanced");
+                                                                             UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
     connect(speechRecognizer.data(), SIGNAL(enabledUpdated(bool)), speechRecognizerAction, SLOT(setChecked(bool)));
 #endif
-
+    /* //UTII: we don't need this in our viewer
     addActionToQMenuAndActionHash(toolsMenu, MenuOption::Chat,
                                   0, // QML Qt::Key_Backslash,
                                   dialogsManager.data(), SLOT(showIRCLink()),
                                   QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
-
+                                 
     addActionToQMenuAndActionHash(toolsMenu, MenuOption::AddRemoveFriends, 0,
                                   qApp, SLOT(showFriendsWindow()));
 
@@ -213,36 +213,36 @@ Menu::Menu() {
 
         connect(discoverabilityManager.data(), &DiscoverabilityManager::discoverabilityModeChanged,
             discoverabilityManager.data(), &DiscoverabilityManager::visibilityChanged);
-    }
+    }*/
 
     addActionToQMenuAndActionHash(toolsMenu,
                                   MenuOption::ToolWindow,
                                   Qt::CTRL | Qt::ALT | Qt::Key_T,
                                   dialogsManager.data(),
                                   SLOT(toggleToolWindow()),
-                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
+                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
 
     addActionToQMenuAndActionHash(toolsMenu,
                                   MenuOption::Console,
                                   Qt::CTRL | Qt::ALT | Qt::Key_J,
                                   DependencyManager::get<StandAloneJSConsole>().data(),
                                   SLOT(toggleConsole()),
-                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
+                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
 
     addActionToQMenuAndActionHash(toolsMenu,
                                   MenuOption::ResetSensors,
                                   0, // QML Qt::Key_Apostrophe,
                                   qApp,
                                   SLOT(resetSensors()),
-                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
+                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
 
     addActionToQMenuAndActionHash(toolsMenu, MenuOption::PackageModel, 0,
                                   qApp, SLOT(packageModel()),
-                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
+                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
 
-    addMenu(DisplayPlugin::MENU_PATH());
+    addMenu(DisplayPlugin::MENU_PATH(), QString(), ItemAccessRoles::Admin);
     {
-        MenuWrapper* displayModeMenu = addMenu(MenuOption::OutputMenu);
+        MenuWrapper* displayModeMenu = addMenu(MenuOption::OutputMenu, QString(), ItemAccessRoles::Admin);
         QActionGroup* displayModeGroup = new QActionGroup(displayModeMenu);
         displayModeGroup->setExclusive(true);
     }
@@ -259,20 +259,23 @@ Menu::Menu() {
                                   MenuOption::IncreaseAvatarSize,
                                   0, // QML Qt::Key_Plus,
                                   avatar,
-                                  SLOT(increaseSize()));
+                                  SLOT(increaseSize()), QAction::NoRole, UNSPECIFIED_POSITION, QString(),
+                                  ItemAccessRoles::Admin);
     addActionToQMenuAndActionHash(avatarSizeMenu,
                                   MenuOption::DecreaseAvatarSize,
                                   0, // QML Qt::Key_Minus,
                                   avatar,
-                                  SLOT(decreaseSize()));
+                                  SLOT(decreaseSize()), QAction::NoRole, UNSPECIFIED_POSITION, QString(),
+                                  ItemAccessRoles::Admin);
     addActionToQMenuAndActionHash(avatarSizeMenu,
                                   MenuOption::ResetAvatarSize,
                                   0, // QML Qt::Key_Equal,
                                   avatar,
-                                  SLOT(resetSize()));
+                                  SLOT(resetSize()), QAction::NoRole, UNSPECIFIED_POSITION, QString(),
+                                  ItemAccessRoles::Admin);
 
     addCheckableActionToQMenuAndActionHash(avatarMenu, MenuOption::NamesAboveHeads, 0, true, 
-                NULL, NULL, UNSPECIFIED_POSITION, "Advanced");
+                                           NULL, NULL, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
 
     MenuWrapper* viewMenu = addMenu("View");
     addActionToQMenuAndActionHash(viewMenu, MenuOption::ReloadContent, 0, qApp, SLOT(reloadResourceCaches()), 
@@ -289,13 +292,13 @@ Menu::Menu() {
                                                                       true, qApp, SLOT(cameraMenuChanged())));
     cameraModeGroup->addAction(addCheckableActionToQMenuAndActionHash(cameraModeMenu,
                                                                       MenuOption::IndependentMode, 0,
-                                                                      false, qApp, SLOT(cameraMenuChanged())));
+                                                                      false, qApp, SLOT(cameraMenuChanged()), UNSPECIFIED_POSITION, QString(), ItemAccessRoles::Admin));
     cameraModeGroup->addAction(addCheckableActionToQMenuAndActionHash(cameraModeMenu,
                                                                       MenuOption::CameraEntityMode, 0,
-                                                                      false, qApp, SLOT(cameraMenuChanged())));
+                                                                      false, qApp, SLOT(cameraMenuChanged()), UNSPECIFIED_POSITION, QString(), ItemAccessRoles::Admin));
     cameraModeGroup->addAction(addCheckableActionToQMenuAndActionHash(cameraModeMenu,
                                                                       MenuOption::FullscreenMirror, 0, // QML Qt::Key_H,
-                                                                      false, qApp, SLOT(cameraMenuChanged())));
+                                                                      false, qApp, SLOT(cameraMenuChanged()), UNSPECIFIED_POSITION, QString(), ItemAccessRoles::Admin));
 
     addCheckableActionToQMenuAndActionHash(viewMenu, MenuOption::Mirror,
         0, //QML Qt::SHIFT | Qt::Key_H,
@@ -319,8 +322,10 @@ Menu::Menu() {
     addActionToQMenuAndActionHash(viewMenu, MenuOption::OctreeStats, 0,
                 dialogsManager.data(), SLOT(octreeStatsDetails()), QAction::NoRole, UNSPECIFIED_POSITION, "Developer");
 
-    addCheckableActionToQMenuAndActionHash(viewMenu, "Advanced Menus", 0, false, this, SLOT(toggleAdvancedMenus()));
-    addCheckableActionToQMenuAndActionHash(viewMenu, "Developer Menus", 0, false, this, SLOT(toggleDeveloperMenus()));
+    addCheckableActionToQMenuAndActionHash(viewMenu, "Advanced Menus", 0, false, this, SLOT(toggleAdvancedMenus()),
+                                           UNSPECIFIED_POSITION, QString(), ItemAccessRoles::Admin);
+    addCheckableActionToQMenuAndActionHash(viewMenu, "Developer Menus", 0, false, this, SLOT(toggleDeveloperMenus()),
+                                           UNSPECIFIED_POSITION, QString(), ItemAccessRoles::Admin);
 
     MenuWrapper* developerMenu = addMenu("Developer", "Developer", ItemAccessRoles::Admin);
 
@@ -633,7 +638,7 @@ void Menu::loadAction(Settings& settings, QAction& action) {
 }
 
 void Menu::saveAction(Settings& settings, QAction& action) {
-    settings.setValue(action.text(),  action.isChecked());
+    settings.setValue(action.text(), action.isChecked());
 }
 
 void Menu::scanMenuBar(settingsAction modifySetting) {
@@ -848,7 +853,6 @@ QAction* Menu::addCheckableActionToQMenuAndActionHash(MenuWrapper* destinationMe
 
     if (isValidGrouping(grouping)) {
         _groupingActions[grouping] << action;
-        
     }
 
     action->setVisible(getGroupingIsVisible(grouping) && getItemRoleIsVisible(accessRoles));
@@ -1176,7 +1180,7 @@ void Menu::setGroupingIsVisible(const QString& grouping, bool isVisible) {
     _groupingVisible[grouping] = isVisible;
 
     for (auto action: _groupingActions[grouping]) {
-        action->setVisible(isVisible);
+        action->setVisible(isVisible && (_currentRole == ItemAccessRoles::Admin || _accessRoleActions[_currentRole].contains(action)));
     }
 
     QMenuBar::repaint();
