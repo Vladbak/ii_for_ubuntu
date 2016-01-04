@@ -59,7 +59,6 @@ void LoadingScreen::checkDownloadProgress() {
             if (myResource->isLoaded()) {
                 loadedCount++;
             }
-
         }
         float newPercentage = ((float)loadedCount / (float)totalCount);
         if (fabs(newPercentage - _percentage) >= 0.01f) {

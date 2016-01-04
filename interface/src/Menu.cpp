@@ -51,6 +51,7 @@ Menu* Menu::getInstance() {
 }
 
 Menu::Menu() {
+    _currentRole = ItemAccessRoles::RankAndFile;
     MenuWrapper * fileMenu = addMenu("File");
 #ifdef Q_OS_MAC
     addActionToQMenuAndActionHash(fileMenu, MenuOption::AboutApp, 0, qApp, SLOT(aboutApp()), QAction::AboutRole);
@@ -69,37 +70,45 @@ Menu::Menu() {
     }
 
     // File Menu > Scripts section -- "Advanced" grouping
-    addDisabledActionAndSeparator(fileMenu, "Scripts", UNSPECIFIED_POSITION, "Advanced");
+    addDisabledActionAndSeparator(fileMenu, "Scripts", UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
     addActionToQMenuAndActionHash(fileMenu, MenuOption::LoadScript, Qt::CTRL | Qt::Key_O,
                                   qApp, SLOT(loadDialog()),
-                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
+                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
     addActionToQMenuAndActionHash(fileMenu, MenuOption::LoadScriptURL,
-                                    Qt::CTRL | Qt::SHIFT | Qt::Key_O, qApp, SLOT(loadScriptURLDialog()),
-                                    QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
+                                  Qt::CTRL | Qt::SHIFT | Qt::Key_O, qApp, SLOT(loadScriptURLDialog()),
+                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
     addActionToQMenuAndActionHash(fileMenu, MenuOption::StopAllScripts, 0, qApp, SLOT(stopAllScripts()),
-                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
+                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
     addActionToQMenuAndActionHash(fileMenu, MenuOption::ReloadAllScripts, Qt::CTRL | Qt::Key_R,
                                   qApp, SLOT(reloadAllScripts()),
-                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
+                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
     addActionToQMenuAndActionHash(fileMenu, MenuOption::RunningScripts, Qt::CTRL | Qt::Key_J,
                                   qApp, SLOT(toggleRunningScriptsWidget()),
-                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
+                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
 
     auto addressManager = DependencyManager::get<AddressManager>();
 
-    addDisabledActionAndSeparator(fileMenu, "History");
+    addDisabledActionAndSeparator(fileMenu, "History", -1, QString(), ItemAccessRoles::Admin);
 
     QAction* backAction = addActionToQMenuAndActionHash(fileMenu,
                                                         MenuOption::Back,
                                                         0,
                                                         addressManager.data(),
-                                                        SLOT(goBack()));
+                                                        SLOT(goBack()),
+                                                        QAction::NoRole,
+                                                        -1,
+                                                        QString(),
+                                                        ItemAccessRoles::Admin);
 
     QAction* forwardAction = addActionToQMenuAndActionHash(fileMenu,
                                                            MenuOption::Forward,
                                                            0,
                                                            addressManager.data(),
-                                                           SLOT(goForward()));
+                                                           SLOT(goForward()),
+                                                           QAction::NoRole,
+                                                           -1,
+                                                           QString(),
+                                                           ItemAccessRoles::Admin);
 
     // connect to the AddressManager signal to enable and disable the back and forward menu items
     connect(addressManager.data(), &AddressManager::goBackPossible, backAction, &QAction::setEnabled);
@@ -116,7 +125,11 @@ Menu::Menu() {
                                   MenuOption::AddressBar,
                                   Qt::CTRL | Qt::Key_L,
                                   dialogsManager.data(),
-                                  SLOT(toggleAddressBar()));
+                                  SLOT(toggleAddressBar()),
+                                  QAction::NoRole,
+                                  -1,
+                                  QString(),
+                                  (ItemAccessRoles) (ItemAccessRoles::THERankAndFile | ItemAccessRoles::THETrainers));
     addActionToQMenuAndActionHash(fileMenu, MenuOption::CopyAddress, 0,
                                   addressManager.data(), SLOT(copyAddress()),
                                   QAction::NoRole, UNSPECIFIED_POSITION, "Advanced");
@@ -137,11 +150,11 @@ Menu::Menu() {
     QUndoStack* undoStack = qApp->getUndoStack();
     QAction* undoAction = undoStack->createUndoAction(editMenu);
     undoAction->setShortcut(Qt::CTRL | Qt::Key_Z);
-    addActionToQMenuAndActionHash(editMenu, undoAction);
+    addActionToQMenuAndActionHash(editMenu, undoAction, QString(), 0, QAction::NoRole, -1, QString(), ItemAccessRoles::Admin);
 
     QAction* redoAction = undoStack->createRedoAction(editMenu);
     redoAction->setShortcut(Qt::CTRL | Qt::SHIFT | Qt::Key_Z);
-    addActionToQMenuAndActionHash(editMenu, redoAction);
+    addActionToQMenuAndActionHash(editMenu, redoAction, QString(), 0, QAction::NoRole, -1, QString(), ItemAccessRoles::Admin);
 
     addActionToQMenuAndActionHash(editMenu,
                                   MenuOption::Preferences,
@@ -309,7 +322,7 @@ Menu::Menu() {
     addCheckableActionToQMenuAndActionHash(viewMenu, "Advanced Menus", 0, false, this, SLOT(toggleAdvancedMenus()));
     addCheckableActionToQMenuAndActionHash(viewMenu, "Developer Menus", 0, false, this, SLOT(toggleDeveloperMenus()));
 
-    MenuWrapper* developerMenu = addMenu("Developer", "Developer");
+    MenuWrapper* developerMenu = addMenu("Developer", "Developer", ItemAccessRoles::Admin);
 
     MenuWrapper* renderOptionsMenu = developerMenu->addMenu("Render");
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::Atmosphere,
@@ -643,7 +656,7 @@ void Menu::scanMenu(QMenu& menu, settingsAction modifySetting, Settings& setting
 }
 
 void Menu::addDisabledActionAndSeparator(MenuWrapper* destinationMenu, const QString& actionName, 
-                                            int menuItemLocation, const QString& grouping) {
+        int menuItemLocation, const QString& grouping, ItemAccessRoles accessRoles) {
     QAction* actionBefore = NULL;
     QAction* separator;
     QAction* separatorText;
@@ -666,13 +679,30 @@ void Menu::addDisabledActionAndSeparator(MenuWrapper* destinationMenu, const QSt
         separatorText->setEnabled(false);
     }
 
+    if ((accessRoles & RankAndFile) == RankAndFile) {
+        _accessRoleActions[RankAndFile] << separator;
+        _accessRoleActions[RankAndFile] << separatorText;
+    }
+    if ((accessRoles & Trainers) == Trainers) {
+        _accessRoleActions[Trainers] << separator;
+        _accessRoleActions[Trainers] << separatorText;
+    }
+    if ((accessRoles & THERankAndFile) == THERankAndFile) {
+        _accessRoleActions[THERankAndFile] << separator;
+        _accessRoleActions[THERankAndFile] << separatorText;
+    }
+    if ((accessRoles & THETrainers) == THETrainers) {
+        _accessRoleActions[THETrainers] << separator;
+        _accessRoleActions[THETrainers] << separatorText;
+    }
+
     if (isValidGrouping(grouping)) {
         _groupingActions[grouping] << separator;
         _groupingActions[grouping] << separatorText;
-        bool isVisible = getGroupingIsVisible(grouping);
-        separator->setVisible(isVisible);
-        separatorText->setVisible(isVisible);
     }
+    bool isVisible = getGroupingIsVisible(grouping) && getItemRoleIsVisible(accessRoles);
+    separator->setVisible(isVisible);
+    separatorText->setVisible(isVisible);
 }
 
 QAction* Menu::addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
@@ -682,7 +712,8 @@ QAction* Menu::addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
                                              const char* member,
                                              QAction::MenuRole role,
                                              int menuItemLocation, 
-                                             const QString& grouping) {
+                                             const QString& grouping,
+                                             ItemAccessRoles accessRoles) {
     QAction* action = NULL;
     QAction* actionBefore = NULL;
 
@@ -710,10 +741,23 @@ QAction* Menu::addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
 
     _actionHash.insert(actionName, action);
 
-    if (isValidGrouping(grouping)) {
-        _groupingActions[grouping] << action;
-        action->setVisible(getGroupingIsVisible(grouping));
+    if ((accessRoles & RankAndFile) == RankAndFile) {
+        _accessRoleActions[RankAndFile] << action;
     }
+    if ((accessRoles & Trainers) == Trainers) {
+        _accessRoleActions[Trainers] << action;
+    }
+    if ((accessRoles & THERankAndFile) == THERankAndFile) {
+        _accessRoleActions[THERankAndFile] << action;
+    }
+    if ((accessRoles & THETrainers) == THETrainers) {
+        _accessRoleActions[THETrainers] << action;
+    }
+
+    if (isValidGrouping(grouping)) {
+        _groupingActions[grouping] << action;  
+    }
+    action->setVisible(getGroupingIsVisible(grouping) && getItemRoleIsVisible(accessRoles));
 
     return action;
 }
@@ -724,7 +768,8 @@ QAction* Menu::addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
                                              const QKeySequence& shortcut,
                                              QAction::MenuRole role,
                                              int menuItemLocation, 
-                                             const QString& grouping) {
+                                             const QString& grouping,
+                                             ItemAccessRoles accessRoles) {
     QAction* actionBefore = NULL;
 
     if (menuItemLocation >= 0 && destinationMenu->actions().size() > menuItemLocation) {
@@ -751,10 +796,24 @@ QAction* Menu::addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
 
     _actionHash.insert(action->text(), action);
 
+    if ((accessRoles & RankAndFile) == RankAndFile) {
+        _accessRoleActions[RankAndFile] << action;
+    }
+    if ((accessRoles & Trainers) == Trainers) {
+        _accessRoleActions[Trainers] << action;
+    }
+    if ((accessRoles & THERankAndFile) == THERankAndFile) {
+        _accessRoleActions[THERankAndFile] << action;
+    }
+    if ((accessRoles & THETrainers) == THETrainers) {
+        _accessRoleActions[THETrainers] << action;
+    }
+
     if (isValidGrouping(grouping)) {
         _groupingActions[grouping] << action;
-        action->setVisible(getGroupingIsVisible(grouping));
     }
+
+    action->setVisible(getGroupingIsVisible(grouping) && getItemRoleIsVisible(accessRoles));
 
     return action;
 }
@@ -766,17 +825,33 @@ QAction* Menu::addCheckableActionToQMenuAndActionHash(MenuWrapper* destinationMe
                                                       const QObject* receiver,
                                                       const char* member,
                                                       int menuItemLocation, 
-                                                      const QString& grouping) {
+                                                      const QString& grouping,
+                                                      ItemAccessRoles accessRoles) {
 
     QAction* action = addActionToQMenuAndActionHash(destinationMenu, actionName, shortcut, receiver, member,
                                                         QAction::NoRole, menuItemLocation);
     action->setCheckable(true);
     action->setChecked(checked);
 
+    if ((accessRoles & RankAndFile) == RankAndFile) {
+        _accessRoleActions[RankAndFile] << action;
+    }
+    if ((accessRoles & Trainers) == Trainers) {
+        _accessRoleActions[Trainers] << action;
+    }
+    if ((accessRoles & THERankAndFile) == THERankAndFile) {
+        _accessRoleActions[THERankAndFile] << action;
+    }
+    if ((accessRoles & THETrainers) == THETrainers) {
+        _accessRoleActions[THETrainers] << action;
+    }
+
     if (isValidGrouping(grouping)) {
         _groupingActions[grouping] << action;
-        action->setVisible(getGroupingIsVisible(grouping));
+        
     }
+
+    action->setVisible(getGroupingIsVisible(grouping) && getItemRoleIsVisible(accessRoles));
 
     return action;
 }
@@ -917,7 +992,7 @@ int Menu::positionBeforeSeparatorIfNeeded(MenuWrapper* menu, int requestedPositi
 }
 
 
-MenuWrapper* Menu::addMenu(const QString& menuName, const QString& grouping) {
+MenuWrapper* Menu::addMenu(const QString& menuName, const QString& grouping, ItemAccessRoles accessRoles) {
     QStringList menuTree = menuName.split(">");
     MenuWrapper* addTo = NULL;
     MenuWrapper* menu = NULL;
@@ -933,12 +1008,24 @@ MenuWrapper* Menu::addMenu(const QString& menuName, const QString& grouping) {
         addTo = menu;
     }
 
-    if (isValidGrouping(grouping)) {
-        auto action = getMenuAction(menuName);
-        if (action) {
-            _groupingActions[grouping] << action;
-            action->setVisible(getGroupingIsVisible(grouping));
+    auto action = getMenuAction(menuName);
+    if (action) {
+        if ((accessRoles & RankAndFile) == RankAndFile) {
+            _accessRoleActions[RankAndFile] << action;
         }
+        if ((accessRoles & Trainers) == Trainers) {
+            _accessRoleActions[Trainers] << action;
+        }
+        if ((accessRoles & THERankAndFile) == THERankAndFile) {
+            _accessRoleActions[THERankAndFile] << action;
+        }
+        if ((accessRoles & THETrainers) == THETrainers) {
+            _accessRoleActions[THETrainers] << action;
+        }
+        if (isValidGrouping(grouping)) {
+            _groupingActions[grouping] << action;
+        }
+        action->setVisible(getGroupingIsVisible(grouping) && getItemRoleIsVisible(accessRoles));
     }
 
     QMenuBar::repaint();
@@ -1067,6 +1154,16 @@ bool Menu::getGroupingIsVisible(const QString& grouping) {
     }
     if (_groupingVisible.contains(grouping)) {
         return _groupingVisible[grouping];
+    }
+    return false;
+}
+
+bool Menu::getItemRoleIsVisible(ItemAccessRoles roles) {
+    if (_currentRole == Admin) {
+        return true;
+    }
+    if ((roles & _currentRole) == _currentRole) {
+        return true;
     }
     return false;
 }
