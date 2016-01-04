@@ -18,7 +18,6 @@ LoadingScreen::LoadingScreen(QQuickItem *parent) : QQuickItem(parent)
 {
     _percentage = 0.0f;
     _downloading = false;
-    _loadedResources = false;
     _checkDownloadTimer = new QTimer(this);
     connect(_checkDownloadTimer, &QTimer::timeout, this, &LoadingScreen::checkDownloadProgress);
     const int CHECK_DOWNLOAD_INTERVAL = MSECS_PER_SECOND / 2;
@@ -34,18 +33,42 @@ void LoadingScreen::nodeAdded(SharedNodePointer node) {
     }
 }
 
+int LoadingScreen::getCompletedDownloads() {
+    int result = 0;
+    foreach(Resource* resource, _loadedResources) {
+        if (resource->isLoaded()) {
+            result++;
+        }
+    }
+    return result;
+}
+
 void LoadingScreen::checkDownloadProgress() {
     float progress = 0.0f;
-    if (_downloading) {
-        foreach(Resource* resource, ResourceCache::getLoadingRequests()) {
-            _foundRequest = true;
-            progress += resource->getProgress();
+    if (_downloading && OctreeElement::getNodeCount() > 0) {
+        QSharedPointer<TextureCache> modelCacheP = DependencyManager::get<TextureCache>();
+        ResourceCache* modelCache = modelCacheP.data();
+        int totalCount = 0;
+        int loadedCount = 0;
+        foreach (QSharedPointer<Resource> resource, modelCache->getAllResources()) {
+            if (resource.isNull()) {
+                continue;
+            }
+            totalCount++;
+            Resource* myResource = resource.data();
+            if (myResource->isLoaded()) {
+                loadedCount++;
+            }
+
         }
-        int totalCount = ResourceCache::getPendingRequestCount() + ResourceCache::getLoadingRequests().count() + _loadedResources;
-        _percentage = (_loadedResources + progress) / totalCount;
-        
+        float newPercentage = ((float)loadedCount / (float)totalCount);
+        if (fabs(newPercentage - _percentage) >= 0.01f) {
+            _percentage = newPercentage;
+            emit percentageChanged();
+        }
     }
-    
+
+    emit percentageChanged();
     if (_foundRequest && _percentage > 0.99f) {
         _checkDownloadTimer->stop();
         setParent(NULL);

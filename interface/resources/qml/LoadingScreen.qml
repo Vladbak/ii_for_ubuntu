@@ -52,7 +52,7 @@ Item {
                 rotation: 0
                 scale: 1
                 orientation: 1
-                value: LoadingScreen.percentage
+                value: loadingScreen.percentage
                 maximumValue: 1
                 anchors.bottom: parent.bottom
                 anchors.rightMargin: 0
@@ -60,5 +60,9 @@ Item {
                 anchors.bottomMargin: 0
             }
         }
+        Connections {
+            target: loadingScreen.parent
+        }
     }
+    
 }

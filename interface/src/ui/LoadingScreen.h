@@ -18,7 +18,7 @@ class LoadingScreen : public QQuickItem {
     Q_OBJECT
     HIFI_QML_DECL
 
-    Q_PROPERTY(float percentage READ getPercentage)
+    Q_PROPERTY(float percentage READ getPercentage NOTIFY percentageChanged)
 
 public:
     LoadingScreen(QQuickItem* parent = nullptr);
@@ -28,9 +28,13 @@ public:
 private:
     bool _downloading;
     bool _foundRequest;
-    int _loadedResources;
+    QList<Resource*> _loadedResources;
     float _percentage;
     QTimer* _checkDownloadTimer;
+    int getCompletedDownloads();
+
+signals:
+    void percentageChanged();
 
 private slots:
     void checkDownloadProgress();
