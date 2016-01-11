@@ -31,6 +31,8 @@ DiscoverabilityManager::DiscoverabilityManager() :
 const QString API_USER_LOCATION_PATH = "/api/v1/user/location";
 
 void DiscoverabilityManager::updateLocation() {
+    //UTII: We don't need this in our viewer
+    return;
     AccountManager& accountManager = AccountManager::getInstance();
     
     if (_mode.get() != Discoverability::None) {

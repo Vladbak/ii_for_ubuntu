@@ -25,7 +25,8 @@ UserActivityLogger& UserActivityLogger::getInstance() {
     return sharedInstance;
 }
 
-UserActivityLogger::UserActivityLogger() : _disabled(false) {
+//UTII: we disable the useractivity logger by default, we dont need it
+UserActivityLogger::UserActivityLogger() : _disabled(true) {
 }
 
 void UserActivityLogger::disable(bool disable) {

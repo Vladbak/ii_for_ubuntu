@@ -154,6 +154,7 @@
 #include "ui/DataWebDialog.h"
 #include "ui/DialogsManager.h"
 #include "ui/LoginDialog.h"
+#include "ui/LoadingScreen.h"
 #include "ui/overlays/Cube3DOverlay.h"
 #include "ui/Snapshot.h"
 #include "ui/StandAloneJSConsole.h"
@@ -571,12 +572,13 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     // connect to appropriate slots on AccountManager
     AccountManager& accountManager = AccountManager::getInstance();
 
-    const qint64 BALANCE_UPDATE_INTERVAL_MSECS = 5 * 1000;
+    //UTII: we dont need to keep track of the account balance
+    //const qint64 BALANCE_UPDATE_INTERVAL_MSECS = 5 * 1000;
 
-    connect(&balanceUpdateTimer, &QTimer::timeout, &accountManager, &AccountManager::updateBalance);
-    balanceUpdateTimer.start(BALANCE_UPDATE_INTERVAL_MSECS);
+    //connect(&balanceUpdateTimer, &QTimer::timeout, &accountManager, &AccountManager::updateBalance);
+    //balanceUpdateTimer.start(BALANCE_UPDATE_INTERVAL_MSECS);
 
-    connect(&accountManager, &AccountManager::balanceChanged, this, &Application::updateWindowTitle);
+    //connect(&accountManager, &AccountManager::balanceChanged, this, &Application::updateWindowTitle);
 
     auto dialogsManager = DependencyManager::get<DialogsManager>();
     connect(&accountManager, &AccountManager::authRequired, dialogsManager.data(), &DialogsManager::showLoginDialog);
@@ -973,6 +975,8 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     connect(this, &Application::applicationStateChanged, this, &Application::activeChanged);
 
     qCDebug(interfaceapp, "Startup time: %4.2f seconds.", (double)startupTimer.elapsed() / 1000.0);
+
+    LoadingScreen::show();
 }
 
 void Application::aboutToQuit() {
@@ -1176,6 +1180,7 @@ void Application::initializeUi() {
     VrMenu::registerType();
     Tooltip::registerType();
     UpdateDialog::registerType();
+    LoadingScreen::registerType();
 
     auto offscreenUi = DependencyManager::get<OffscreenUi>();
     offscreenUi->create(_offscreenContext->getContext());

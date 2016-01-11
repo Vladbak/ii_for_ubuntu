@@ -79,6 +79,10 @@ public:
     static int getPendingRequestCount() 
         { return DependencyManager::get<ResourceCacheSharedItems>()->_pendingRequests.size(); }
 
+    QList<QWeakPointer<Resource>> getAllResources() {
+        return _resources.values();
+    }
+
     ResourceCache(QObject* parent = NULL);
     virtual ~ResourceCache();
     
