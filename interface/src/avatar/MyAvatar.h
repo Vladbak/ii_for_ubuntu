@@ -295,7 +295,8 @@ private:
     void setScriptedMotorTimescale(float timescale);
     void setScriptedMotorFrame(QString frame);
     virtual void attach(const QString& modelURL, const QString& jointName = QString(),
-                        const glm::vec3& translation = glm::vec3(), const glm::quat& rotation = glm::quat(), float scale = 1.0f,
+                        const glm::vec3& translation = glm::vec3(), const glm::quat& rotation = glm::quat(),
+                        float scale = 1.0f, bool isSoft = false,
                         bool allowDuplicates = false, bool useSaved = true) override;
 
     //void beginFollowingHMD();
@@ -311,11 +312,13 @@ private:
 
     void setVisibleInSceneIfReady(Model* model, render::ScenePointer scene, bool visiblity);
 
-    PalmData getActivePalmData(int palmIndex) const;
-
     // derive avatar body position and orientation from the current HMD Sensor location.
     // results are in HMD frame
     glm::mat4 deriveBodyFromHMDSensor() const;
+
+    virtual void updatePalms() override {}
+    void lateUpdatePalms();
+
 
     float _driveKeys[MAX_DRIVE_KEYS];
     bool _wasPushing;
