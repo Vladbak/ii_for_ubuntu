@@ -49,11 +49,14 @@ macro(PACKAGE_LIBRARIES_FOR_DEPLOYMENT)
       message(FATAL_ERROR "Could not find macdeployqt at ${QT_DIR}/bin. macdeployqt is required.")
     endif ()
   
+    if (NOT APP_NAME)
+        set(APP_NAME TARGET_NAME)
+    endif ()
     # add a post-build command to call macdeployqt to copy Qt plugins
     add_custom_command(
       TARGET ${TARGET_NAME}
       POST_BUILD
-      COMMAND ${MACDEPLOYQT_COMMAND} ${CMAKE_CURRENT_BINARY_DIR}/\${CONFIGURATION}/${TARGET_NAME}.app -verbose 0
+      COMMAND ${MACDEPLOYQT_COMMAND} ${CMAKE_CURRENT_BINARY_DIR}/\${CONFIGURATION}/${APP_NAME}.app -verbose 0
     )
   endif ()
 endmacro()

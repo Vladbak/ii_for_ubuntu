@@ -1,5 +1,6 @@
 set(TARGET_NAME interface)
 project(${TARGET_NAME})
+set(APP_NAME "Infinity Island")
 
 # set a default root dir for each of our optional externals if it was not passed
 #set(OPTIONAL_EXTERNALS "LeapMotion")
@@ -101,7 +102,7 @@ endif()
 set_target_properties(
     ${TARGET_NAME}
     PROPERTIES 
-      OUTPUT_NAME "Infinity Island"
+      OUTPUT_NAME ${APP_NAME}
 )
 
 # These are external plugins, but we need to do the 'add dependency' here so that their 
@@ -229,3 +230,4 @@ endif()
 
 package_libraries_for_deployment()
 consolidate_stack_components()
+unset(APP_NAME)
