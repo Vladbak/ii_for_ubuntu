@@ -115,11 +115,10 @@ Menu::Menu() {
         Qt::CTRL | Qt::SHIFT | Qt::Key_O, qApp, SLOT(loadScriptURLDialog()),
                                   QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
 
-                                                                             UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
     // Edit > Stop All Scripts... [advanced]
     addActionToQMenuAndActionHash(editMenu, MenuOption::StopAllScripts, 0, qApp, SLOT(stopAllScripts()),
         QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
-    /* //UTII: we don't need this in our viewer
+
     // Edit > Reload All Scripts... [advanced]
     addActionToQMenuAndActionHash(editMenu, MenuOption::ReloadAllScripts, Qt::CTRL | Qt::Key_R,
         qApp, SLOT(reloadAllScripts()),
@@ -1039,8 +1038,8 @@ MenuWrapper* Menu::addMenu(const QString& menuName, const QString& grouping, Ite
         addTo = menu;
     }
 
-        auto action = getMenuAction(menuName);
-        if (action) {
+    auto action = getMenuAction(menuName);
+    if (action) {
         if ((accessRoles & RankAndFile) == RankAndFile) {
             _accessRoleActions[RankAndFile] << action;
         }
