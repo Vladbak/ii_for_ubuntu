@@ -140,8 +140,13 @@ var importingSVOTextOverlay = Overlays.addOverlay("text", {
 });
 
 var MARKETPLACE_URL = "https://metaverse.highfidelity.com/marketplace";
-var marketplaceWindow = new OverlayWebWindow('Marketplace', "about:blank", 900, 700, false);
-marketplaceWindow.setVisible(false);
+var marketplaceWindow = new OverlayWebWindow({
+    title: 'Marketplace', 
+    source: "about:blank", 
+    width: 900, 
+    height: 700,
+    visible: false
+});
 
 function showMarketplace(marketplaceID) {
     var url = MARKETPLACE_URL;
@@ -178,8 +183,7 @@ var toolBar = (function() {
         newTextButton,
         newWebButton,
         newZoneButton,
-        newPolyVoxButton,
-        browseMarketplaceButton;
+        newPolyVoxButton;
 
     function initialize() {
         toolBar = new ToolBar(0, 0, ToolBar.VERTICAL, "highfidelity.edit.toolbar", function(windowDimensions, toolbar) {
@@ -189,13 +193,7 @@ var toolBar = (function() {
             };
         });
 
-        browseMarketplaceButton = toolBar.addTool({
-            imageURL: toolIconUrl + "marketplace.svg",
-            width: toolWidth,
-            height: toolHeight,
-            alpha: 0.9,
-            visible: true,
-        });
+  
 
         activeButton = toolBar.addTool({
             imageURL: toolIconUrl + "edit-status.svg",
@@ -410,7 +408,6 @@ var toolBar = (function() {
     }
 
     var newModelButtonDown = false;
-    var browseMarketplaceButtonDown = false;
     that.mousePressEvent = function(event) {
         var clickedOverlay,
             url,
@@ -438,11 +435,7 @@ var toolBar = (function() {
             return true;
         }
         
-        if (browseMarketplaceButton === toolBar.clicked(clickedOverlay)) {
-            toggleMarketplace();
-            return true;
-        }
-
+     
         if (newCubeButton === toolBar.clicked(clickedOverlay)) {
             createNewEntity({
                 type: "Box",
@@ -647,22 +640,10 @@ var toolBar = (function() {
                 }
                 handled = true;
             }
-        } else if (browseMarketplaceButtonDown) {
-            var clickedOverlay = Overlays.getOverlayAtPoint({
-                x: event.x,
-                y: event.y
-            });
-            if (browseMarketplaceButton === toolBar.clicked(clickedOverlay)) {
-                url = Window.s3Browse(".*(fbx|FBX|obj|OBJ)");
-                if (url !== null && url !== "") {
-                    addModel(url);
-                }
-                handled = true;
-            }
         }
 
         newModelButtonDown = false;
-        browseMarketplaceButtonDown = false;
+     
 
         return handled;
     }
@@ -1021,9 +1002,8 @@ function setupModelMenus() {
     // adj our menuitems
     Menu.addMenuItem({
         menuName: "Edit",
-        menuItemName: "Models",
+        menuItemName: "Entities",
         isSeparator: true,
-        beforeItem: "Physics",
         grouping: "Advanced"
     });
     if (!Menu.menuItemExists("Edit", "Delete")) {
@@ -1034,7 +1014,7 @@ function setupModelMenus() {
             shortcutKeyEvent: {
                 text: "backspace"
             },
-            afterItem: "Models",
+            afterItem: "Entities",
             grouping: "Advanced"
         });
         modelMenuAddedDelete = true;
@@ -1046,7 +1026,7 @@ function setupModelMenus() {
         menuName: "Edit",
         menuItemName: "Entity List...",
         shortcutKey: "CTRL+META+L",
-        afterItem: "Models",
+        afterItem: "Entities",
         grouping: "Advanced"
     });
     Menu.addMenuItem({
@@ -1091,28 +1071,21 @@ function setupModelMenus() {
     });
 
     Menu.addMenuItem({
-        menuName: "File",
-        menuItemName: "Models",
-        isSeparator: true,
-        beforeItem: "Settings",
-        grouping: "Advanced"
-    });
-    Menu.addMenuItem({
-        menuName: "File",
+        menuName: "Edit",
         menuItemName: "Export Entities",
         shortcutKey: "CTRL+META+E",
-        afterItem: "Models",
+        afterItem: "Entities",
         grouping: "Advanced"
     });
     Menu.addMenuItem({
-        menuName: "File",
+        menuName: "Edit",
         menuItemName: "Import Entities",
         shortcutKey: "CTRL+META+I",
         afterItem: "Export Entities",
         grouping: "Advanced"
     });
     Menu.addMenuItem({
-        menuName: "File",
+        menuName: "Edit",
         menuItemName: "Import Entities from URL",
         shortcutKey: "CTRL+META+U",
         afterItem: "Import Entities",
@@ -1157,7 +1130,7 @@ function setupModelMenus() {
 setupModelMenus(); // do this when first running our script.
 
 function cleanupModelMenus() {
-    Menu.removeSeparator("Edit", "Models");
+    Menu.removeSeparator("Edit", "Entities");
     if (modelMenuAddedDelete) {
         // delete our menuitems
         Menu.removeMenuItem("Edit", "Delete");
@@ -1170,10 +1143,9 @@ function cleanupModelMenus() {
     Menu.removeMenuItem("Edit", "Select All Entities In Box");
     Menu.removeMenuItem("Edit", "Select All Entities Touching Box");
 
-    Menu.removeSeparator("File", "Models");
-    Menu.removeMenuItem("File", "Export Entities");
-    Menu.removeMenuItem("File", "Import Entities");
-    Menu.removeMenuItem("File", "Import Entities from URL");
+    Menu.removeMenuItem("Edit", "Export Entities");
+    Menu.removeMenuItem("Edit", "Import Entities");
+    Menu.removeMenuItem("Edit", "Import Entities from URL");
 
     Menu.removeMenuItem("Edit", MENU_AUTO_FOCUS_ON_SELECT);
     Menu.removeMenuItem("Edit", MENU_EASE_ON_FOCUS);
@@ -1530,7 +1502,11 @@ PropertiesTool = function(opts) {
     var that = {};
 
     var url = Script.resolvePath('html/entityProperties.html');
-    var webView = new WebWindow('Entity Properties', url, 200, 280, true);
+    var webView = new OverlayWebWindow({
+        title: 'Entity Properties', 
+        source: url, 
+        toolWindow: true
+    });
 
     var visible = false;
 

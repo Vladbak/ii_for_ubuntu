@@ -13,9 +13,9 @@
 
 #include <QJsonDocument>
 #include <QtCore/QThread>
+#include <glm/gtx/transform.hpp>
 
 #include <AbstractViewStateInterface.h>
-#include <DeferredLightingEffect.h>
 #include <Model.h>
 #include <PerfStat.h>
 #include <render/Scene.h>
@@ -100,6 +100,21 @@ int RenderableModelEntityItem::readEntitySubclassDataFromBuffer(const unsigned c
     return bytesRead;
 }
 
+QVariantMap RenderableModelEntityItem::parseTexturesToMap(QString textures) {
+    if (textures == "") {
+        return QVariantMap();
+    }
+
+    QString jsonTextures = "{\"" + textures.replace(":\"", "\":\"").replace(",\n", ",\"") + "}";
+    QJsonParseError error;
+    QJsonDocument texturesAsJson = QJsonDocument::fromJson(jsonTextures.toUtf8(), &error);
+    if (error.error != QJsonParseError::NoError) {
+        qCWarning(entitiesrenderer) << "Could not evaluate textures property value:" << _textures;
+    }
+    QJsonObject texturesAsJsonObject = texturesAsJson.object();
+    return texturesAsJsonObject.toVariantMap();
+}
+
 void RenderableModelEntityItem::remapTextures() {
     if (!_model) {
         return; // nothing to do if we don't have a model
@@ -124,13 +139,8 @@ void RenderableModelEntityItem::remapTextures() {
     // since we're changing here, we need to run through our current texture map
     // and any textures in the recently mapped texture, that is not in our desired
     // textures, we need to "unset"
-    QJsonDocument currentTexturesAsJson = QJsonDocument::fromJson(_currentTextures.toUtf8());
-    QJsonObject currentTexturesAsJsonObject = currentTexturesAsJson.object();
-    QVariantMap currentTextureMap = currentTexturesAsJsonObject.toVariantMap();
-
-    QJsonDocument texturesAsJson = QJsonDocument::fromJson(_textures.toUtf8());
-    QJsonObject texturesAsJsonObject = texturesAsJson.object();
-    QVariantMap textureMap = texturesAsJsonObject.toVariantMap();
+    QVariantMap currentTextureMap = parseTexturesToMap(_currentTextures);
+    QVariantMap textureMap = parseTexturesToMap(_textures);
 
     foreach(const QString& key, currentTextureMap.keys()) {
         // if the desired texture map (what we're setting the textures to) doesn't
@@ -196,7 +206,12 @@ namespace render {
     
     template <> const Item::Bound payloadGetBound(const RenderableModelEntityItemMeta::Pointer& payload) { 
         if (payload && payload->entity) {
-            return payload->entity->getAABox();
+            bool success;
+            auto result = payload->entity->getAABox(success);
+            if (!success) {
+                return render::Item::Bound();
+            }
+            return result;
         }
         return render::Item::Bound();
     }
@@ -230,8 +245,8 @@ bool RenderableModelEntityItem::addToScene(EntityItemPointer self, std::shared_p
 
     return true;
 }
-    
-void RenderableModelEntityItem::removeFromScene(EntityItemPointer self, std::shared_ptr<render::Scene> scene, 
+
+void RenderableModelEntityItem::removeFromScene(EntityItemPointer self, std::shared_ptr<render::Scene> scene,
                                                 render::PendingChanges& pendingChanges) {
     pendingChanges.removeItem(_myMetaItem);
     if (_model) {
@@ -239,6 +254,84 @@ void RenderableModelEntityItem::removeFromScene(EntityItemPointer self, std::sha
     }
 }
 
+void RenderableModelEntityItem::resizeJointArrays(int newSize) {
+    if (newSize < 0) {
+        if (_model && _model->isActive() && _model->isLoaded() && !_needsInitialSimulation) {
+            newSize = _model->getJointStateCount();
+        }
+    }
+    ModelEntityItem::resizeJointArrays(newSize);
+}
+
+bool RenderableModelEntityItem::getAnimationFrame() {
+    bool newFrame = false;
+
+    if (!_model || !_model->isActive() || !_model->isLoaded() || _needsInitialSimulation) {
+        return false;
+    }
+
+    if (!hasAnimation() || !_jointMappingCompleted) {
+        return false;
+    }
+    AnimationPointer myAnimation = getAnimation(_animationProperties.getURL()); // FIXME: this could be optimized
+    if (myAnimation && myAnimation->isLoaded()) {
+
+        const QVector<FBXAnimationFrame>&  frames = myAnimation->getFramesReference(); // NOTE: getFrames() is too heavy
+        auto& fbxJoints = myAnimation->getGeometry().joints;
+
+        int frameCount = frames.size();
+        if (frameCount > 0) {
+            int animationCurrentFrame = (int)(glm::floor(getAnimationCurrentFrame())) % frameCount;
+            if (animationCurrentFrame < 0 || animationCurrentFrame > frameCount) {
+                animationCurrentFrame = 0;
+            }
+
+            if (animationCurrentFrame != _lastKnownCurrentFrame) {
+                _lastKnownCurrentFrame = animationCurrentFrame;
+                newFrame = true;
+
+                resizeJointArrays();
+                if (_jointMapping.size() != _model->getJointStateCount()) {
+                    qDebug() << "RenderableModelEntityItem::getAnimationFrame -- joint count mismatch"
+                             << _jointMapping.size() << _model->getJointStateCount();
+                    assert(false);
+                    return false;
+                }
+
+                const QVector<glm::quat>& rotations = frames[animationCurrentFrame].rotations;
+                const QVector<glm::vec3>& translations = frames[animationCurrentFrame].translations;
+
+                for (int j = 0; j < _jointMapping.size(); j++) {
+                    int index = _jointMapping[j];
+                    if (index >= 0) {
+                        glm::mat4 translationMat;
+                        if (index < translations.size()) {
+                            translationMat = glm::translate(translations[index]);
+                        }
+                        glm::mat4 rotationMat(glm::mat4::_null);
+                        if (index < rotations.size()) {
+                            rotationMat = glm::mat4_cast(fbxJoints[index].preRotation * rotations[index] * fbxJoints[index].postRotation);
+                        } else {
+                            rotationMat = glm::mat4_cast(fbxJoints[index].preRotation * fbxJoints[index].postRotation);
+                        }
+                        glm::mat4 finalMat = (translationMat * fbxJoints[index].preTransform *
+                                              rotationMat * fbxJoints[index].postTransform);
+                        _absoluteJointTranslationsInObjectFrame[j] = extractTranslation(finalMat);
+                        _absoluteJointTranslationsInObjectFrameSet[j] = true;
+                        _absoluteJointTranslationsInObjectFrameDirty[j] = true;
+
+                        _absoluteJointRotationsInObjectFrame[j] = glmExtractRotation(finalMat);
+
+                        _absoluteJointRotationsInObjectFrameSet[j] = true;
+                        _absoluteJointRotationsInObjectFrameDirty[j] = true;
+                    }
+                }
+            }
+        }
+    }
+
+    return newFrame;
+}
 
 // NOTE: this only renders the "meta" portion of the Model, namely it renders debugging items, and it handles
 // the per frame simulation/update that might be required if the models properties changed.
@@ -292,26 +385,32 @@ void RenderableModelEntityItem::render(RenderArgs* args) {
             }
 
             if (_model) {
-                // handle animations..
                 if (hasAnimation()) {
                     if (!jointsMapped()) {
                         QStringList modelJointNames = _model->getJointNames();
                         mapJoints(modelJointNames);
                     }
+                }
 
-                    if (jointsMapped()) {
-                        bool newFrame;
-                        QVector<glm::quat> frameDataRotations;
-                        QVector<glm::vec3> frameDataTranslations;
-                        getAnimationFrame(newFrame, frameDataRotations, frameDataTranslations);
-                        assert(frameDataRotations.size() == frameDataTranslations.size());
-                        if (newFrame) {
-                            for (int i = 0; i < frameDataRotations.size(); i++) {
-                                _model->setJointState(i, true, frameDataRotations[i], frameDataTranslations[i], 1.0f);
-                            }
+                _jointDataLock.withWriteLock([&] {
+                    getAnimationFrame();
+
+                    // relay any inbound joint changes from scripts/animation/network to the model/rig
+                    for (int index = 0; index < _absoluteJointRotationsInObjectFrame.size(); index++) {
+                        if (_absoluteJointRotationsInObjectFrameDirty[index]) {
+                            glm::quat rotation = _absoluteJointRotationsInObjectFrame[index];
+                            _model->setJointRotation(index, true, rotation, 1.0f);
+                            _absoluteJointRotationsInObjectFrameDirty[index] = false;
                         }
                     }
-                }
+                    for (int index = 0; index < _absoluteJointTranslationsInObjectFrame.size(); index++) {
+                        if (_absoluteJointTranslationsInObjectFrameDirty[index]) {
+                            glm::vec3 translation = _absoluteJointTranslationsInObjectFrame[index];
+                            _model->setJointTranslation(index, true, translation, 1.0f);
+                            _absoluteJointTranslationsInObjectFrameDirty[index] = false;
+                        }
+                    }
+                });
 
                 bool movingOrAnimating = isMoving() || isAnimatingSomething();
                 if ((movingOrAnimating ||
@@ -338,9 +437,12 @@ void RenderableModelEntityItem::render(RenderArgs* args) {
     } else {
         static glm::vec4 greenColor(0.0f, 1.0f, 0.0f, 1.0f);
         gpu::Batch& batch = *args->_batch;
-        auto shapeTransform = getTransformToCenter();
-        batch.setModelTransform(Transform()); // we want to include the scale as well
-        DependencyManager::get<DeferredLightingEffect>()->renderWireCubeInstance(batch, shapeTransform, greenColor);
+        bool success;
+        auto shapeTransform = getTransformToCenter(success);
+        if (success) {
+            batch.setModelTransform(Transform()); // we want to include the scale as well
+            DependencyManager::get<GeometryCache>()->renderWireCubeInstance(batch, shapeTransform, greenColor);
+        }
     }
 }
 
@@ -600,7 +702,7 @@ bool RenderableModelEntityItem::contains(const glm::vec3& point) const {
         const FBXGeometry& collisionGeometry = collisionNetworkGeometry->getFBXGeometry();
         return collisionGeometry.convexHullContains(worldToEntity(point));
     }
-    
+
     return false;
 }
 
@@ -624,6 +726,36 @@ glm::vec3 RenderableModelEntityItem::getAbsoluteJointTranslationInObjectFrame(in
     return glm::vec3(0.0f);
 }
 
+bool RenderableModelEntityItem::setAbsoluteJointRotationInObjectFrame(int index, const glm::quat& rotation) {
+    bool result = false;
+    _jointDataLock.withWriteLock([&] {
+        resizeJointArrays();
+        if (index >= 0 && index < _absoluteJointRotationsInObjectFrame.size() &&
+            _absoluteJointRotationsInObjectFrame[index] != rotation) {
+            _absoluteJointRotationsInObjectFrame[index] = rotation;
+            _absoluteJointRotationsInObjectFrameSet[index] = true;
+            _absoluteJointRotationsInObjectFrameDirty[index] = true;
+            result = true;
+        }
+    });
+    return result;
+}
+
+bool RenderableModelEntityItem::setAbsoluteJointTranslationInObjectFrame(int index, const glm::vec3& translation) {
+    bool result = false;
+    _jointDataLock.withWriteLock([&] {
+        resizeJointArrays();
+        if (index >= 0 && index < _absoluteJointTranslationsInObjectFrame.size() &&
+            _absoluteJointTranslationsInObjectFrame[index] != translation) {
+            _absoluteJointTranslationsInObjectFrame[index] = translation;
+            _absoluteJointTranslationsInObjectFrameSet[index] = true;
+            _absoluteJointTranslationsInObjectFrameDirty[index] = true;
+            result = true;
+        }
+    });
+    return result;
+}
+
 void RenderableModelEntityItem::locationChanged() {
     EntityItem::locationChanged();
     if (_model && _model->isActive()) {
@@ -631,3 +763,17 @@ void RenderableModelEntityItem::locationChanged() {
         _model->setTranslation(getPosition());
     }
 }
+
+int RenderableModelEntityItem::getJointIndex(const QString& name) const {
+    if (_model && _model->isActive()) {
+        RigPointer rig = _model->getRig();
+        return rig->indexOfJoint(name);
+    }
+    return -1;
+}
+
+
+// TODO -- expose a way to list joint names
+// RenderableModelEntityItem::QStringList getJointNames() const {
+// rig->nameOfJoint(i);
+// }

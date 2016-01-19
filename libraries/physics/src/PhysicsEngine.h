@@ -45,20 +45,20 @@ typedef QVector<Collision> CollisionEvents;
 
 class PhysicsEngine {
 public:
+    static int16_t getCollisionMask(int16_t group);
+
     uint32_t getNumSubsteps();
 
     PhysicsEngine(const glm::vec3& offset);
     ~PhysicsEngine();
     void init();
 
-    void setSessionUUID(const QUuid& sessionID) { _sessionID = sessionID; }
-    const QUuid& getSessionID() const { return _sessionID; }
+    static void setSessionUUID(const QUuid& sessionID);
+    static const QUuid& getSessionID();
 
-    void addObject(ObjectMotionState* motionState);
-    void removeObject(ObjectMotionState* motionState);
+    void removeObjects(const VectorOfMotionStates& objects);
+    void removeObjects(const SetOfMotionStates& objects); // only called during teardown
 
-    void deleteObjects(const VectorOfMotionStates& objects);
-    void deleteObjects(const SetOfMotionStates& objects); // only called during teardown
     void addObjects(const VectorOfMotionStates& objects);
     VectorOfMotionStates changeObjects(const VectorOfMotionStates& objects);
     void reinsertObject(ObjectMotionState* object);
@@ -86,13 +86,9 @@ public:
     /// \brief call bump on any objects that touch the object corresponding to motionState
     void bump(ObjectMotionState* motionState);
 
-    void removeRigidBody(btRigidBody* body);
-
     void setCharacterController(CharacterController* character);
 
     void dumpNextStats() { _dumpNextStats = true; }
-
-    int16_t getCollisionMask(int16_t group) const;
 
     EntityActionPointer getActionByID(const QUuid& actionID) const;
     void addAction(EntityActionPointer action);
@@ -100,6 +96,9 @@ public:
     void forEachAction(std::function<void(EntityActionPointer)> actor);
 
 private:
+    void addObjectToDynamicsWorld(ObjectMotionState* motionState);
+    void removeObjectFromDynamicsWorld(ObjectMotionState* motionState);
+
     void removeContacts(ObjectMotionState* motionState);
 
     void doOwnershipInfection(const btCollisionObject* objectA, const btCollisionObject* objectB);
@@ -116,7 +115,6 @@ private:
 
     ContactMap _contactMap;
     uint32_t _numContactFrames = 0;
-    uint32_t _lastNumSubstepsAtUpdateInternal = 0;
 
     /// character collisions
     CharacterController* _myAvatarController;
@@ -124,12 +122,10 @@ private:
     bool _dumpNextStats = false;
     bool _hasOutgoingChanges = false;
 
-    QUuid _sessionID;
     CollisionEvents _collisionEvents;
 
     QHash<QUuid, EntityActionPointer> _objectActions;
 
-    btHashMap<btHashInt, int16_t> _collisionMasks;
 
     uint32_t _numSubsteps;
 };

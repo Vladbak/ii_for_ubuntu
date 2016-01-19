@@ -22,20 +22,43 @@ uint32_t PhysicsEngine::getNumSubsteps() {
     return _numSubsteps;
 }
 
+btHashMap<btHashInt, int16_t> _collisionMasks;
+
+void initCollisionMaskTable() {
+    if (_collisionMasks.size() == 0) {
+        // build table of masks with their group as the key
+        _collisionMasks.insert(btHashInt((int)BULLET_COLLISION_GROUP_DYNAMIC), BULLET_COLLISION_MASK_DYNAMIC);
+        _collisionMasks.insert(btHashInt((int)BULLET_COLLISION_GROUP_STATIC), BULLET_COLLISION_MASK_STATIC);
+        _collisionMasks.insert(btHashInt((int)BULLET_COLLISION_GROUP_KINEMATIC), BULLET_COLLISION_MASK_KINEMATIC);
+        _collisionMasks.insert(btHashInt((int)BULLET_COLLISION_GROUP_MY_AVATAR), BULLET_COLLISION_MASK_MY_AVATAR);
+        _collisionMasks.insert(btHashInt((int)BULLET_COLLISION_GROUP_OTHER_AVATAR), BULLET_COLLISION_MASK_OTHER_AVATAR);
+        _collisionMasks.insert(btHashInt((int)BULLET_COLLISION_GROUP_COLLISIONLESS), BULLET_COLLISION_MASK_COLLISIONLESS);
+    }
+}
+
+// static
+int16_t PhysicsEngine::getCollisionMask(int16_t group) {
+    const int16_t* mask = _collisionMasks.find(btHashInt((int)group));
+    return mask ? *mask : BULLET_COLLISION_MASK_DEFAULT;
+}
+
+QUuid _sessionID;
+
+// static
+void PhysicsEngine::setSessionUUID(const QUuid& sessionID) {
+    _sessionID = sessionID;
+}
+
+// static
+const QUuid& PhysicsEngine::getSessionID() {
+    return _sessionID;
+}
+
+
 PhysicsEngine::PhysicsEngine(const glm::vec3& offset) :
         _originOffset(offset),
         _myAvatarController(nullptr) {
-    // build table of masks with their group as the key
-    _collisionMasks.insert(btHashInt((int)COLLISION_GROUP_DEFAULT), COLLISION_MASK_DEFAULT);
-    _collisionMasks.insert(btHashInt((int)COLLISION_GROUP_STATIC), COLLISION_MASK_STATIC);
-    _collisionMasks.insert(btHashInt((int)COLLISION_GROUP_KINEMATIC), COLLISION_MASK_KINEMATIC);
-    _collisionMasks.insert(btHashInt((int)COLLISION_GROUP_DEBRIS), COLLISION_MASK_DEBRIS);
-    _collisionMasks.insert(btHashInt((int)COLLISION_GROUP_TRIGGER), COLLISION_MASK_TRIGGER);
-    _collisionMasks.insert(btHashInt((int)COLLISION_GROUP_MY_AVATAR), COLLISION_MASK_MY_AVATAR);
-    _collisionMasks.insert(btHashInt((int)COLLISION_GROUP_MY_ATTACHMENT), COLLISION_MASK_MY_ATTACHMENT);
-    _collisionMasks.insert(btHashInt((int)COLLISION_GROUP_OTHER_AVATAR), COLLISION_MASK_OTHER_AVATAR);
-    _collisionMasks.insert(btHashInt((int)COLLISION_GROUP_OTHER_ATTACHMENT), COLLISION_MASK_OTHER_ATTACHMENT);
-    _collisionMasks.insert(btHashInt((int)COLLISION_GROUP_COLLISIONLESS), COLLISION_MASK_COLLISIONLESS);
+    initCollisionMaskTable();
 }
 
 PhysicsEngine::~PhysicsEngine() {
@@ -67,14 +90,15 @@ void PhysicsEngine::init() {
     }
 }
 
-void PhysicsEngine::addObject(ObjectMotionState* motionState) {
+// private
+void PhysicsEngine::addObjectToDynamicsWorld(ObjectMotionState* motionState) {
     assert(motionState);
 
     btVector3 inertia(0.0f, 0.0f, 0.0f);
     float mass = 0.0f;
     // NOTE: the body may or may not already exist, depending on whether this corresponds to a reinsertion, or a new insertion.
     btRigidBody* body = motionState->getRigidBody();
-    MotionType motionType = motionState->computeObjectMotionType();
+    PhysicsMotionType motionType = motionState->computePhysicsMotionType();
     motionState->setMotionType(motionType);
     switch(motionType) {
         case MOTION_TYPE_KINEMATIC: {
@@ -138,13 +162,15 @@ void PhysicsEngine::addObject(ObjectMotionState* motionState) {
     body->setFlags(BT_DISABLE_WORLD_GRAVITY);
     motionState->updateBodyMaterialProperties();
 
-    int16_t group = motionState->computeCollisionGroup();
-    _dynamicsWorld->addRigidBody(body, group, getCollisionMask(group));
+    int16_t group, mask;
+    motionState->computeCollisionGroupAndMask(group, mask);
+    _dynamicsWorld->addRigidBody(body, group, mask);
 
     motionState->clearIncomingDirtyFlags();
 }
 
-void PhysicsEngine::removeObject(ObjectMotionState* object) {
+// private
+void PhysicsEngine::removeObjectFromDynamicsWorld(ObjectMotionState* object) {
     // wake up anything touching this object
     bump(object);
     removeContacts(object);
@@ -154,38 +180,34 @@ void PhysicsEngine::removeObject(ObjectMotionState* object) {
     _dynamicsWorld->removeRigidBody(body);
 }
 
-void PhysicsEngine::deleteObjects(const VectorOfMotionStates& objects) {
+void PhysicsEngine::removeObjects(const VectorOfMotionStates& objects) {
     for (auto object : objects) {
-        removeObject(object);
+        removeObjectFromDynamicsWorld(object);
 
         // NOTE: setRigidBody() modifies body->m_userPointer so we should clear the MotionState's body BEFORE deleting it.
         btRigidBody* body = object->getRigidBody();
         object->setRigidBody(nullptr);
         body->setMotionState(nullptr);
         delete body;
-        object->releaseShape();
-        delete object;
     }
 }
 
 // Same as above, but takes a Set instead of a Vector.  Should only be called during teardown.
-void PhysicsEngine::deleteObjects(const SetOfMotionStates& objects) {
+void PhysicsEngine::removeObjects(const SetOfMotionStates& objects) {
     for (auto object : objects) {
         btRigidBody* body = object->getRigidBody();
-        removeObject(object);
+        removeObjectFromDynamicsWorld(object);
 
         // NOTE: setRigidBody() modifies body->m_userPointer so we should clear the MotionState's body BEFORE deleting it.
         object->setRigidBody(nullptr);
         body->setMotionState(nullptr);
         delete body;
-        object->releaseShape();
-        delete object;
     }
 }
 
 void PhysicsEngine::addObjects(const VectorOfMotionStates& objects) {
     for (auto object : objects) {
-        addObject(object);
+        addObjectToDynamicsWorld(object);
     }
 }
 
@@ -200,7 +222,7 @@ VectorOfMotionStates PhysicsEngine::changeObjects(const VectorOfMotionStates& ob
                 stillNeedChange.push_back(object);
             }
         } else if (flags & EASY_DIRTY_PHYSICS_FLAGS) {
-            if (object->handleEasyChanges(flags, this)) {
+            if (object->handleEasyChanges(flags)) {
                 object->clearIncomingDirtyFlags();
             } else {
                 stillNeedChange.push_back(object);
@@ -211,8 +233,8 @@ VectorOfMotionStates PhysicsEngine::changeObjects(const VectorOfMotionStates& ob
 }
 
 void PhysicsEngine::reinsertObject(ObjectMotionState* object) {
-    removeObject(object);
-    addObject(object);
+    removeObjectFromDynamicsWorld(object);
+    addObjectToDynamicsWorld(object);
 }
 
 void PhysicsEngine::removeContacts(ObjectMotionState* motionState) {
@@ -457,11 +479,6 @@ void PhysicsEngine::setCharacterController(CharacterController* character) {
         // the character will be added to the DynamicsWorld later
         _myAvatarController = character;
     }
-}
-
-int16_t PhysicsEngine::getCollisionMask(int16_t group) const {
-    const int16_t* mask = _collisionMasks.find(btHashInt((int)group));
-    return mask ? *mask : COLLISION_MASK_DEFAULT;
 }
 
 EntityActionPointer PhysicsEngine::getActionByID(const QUuid& actionID) const {

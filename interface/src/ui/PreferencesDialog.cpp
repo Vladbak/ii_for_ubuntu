@@ -17,6 +17,7 @@
 #include <devices/DdeFaceTracker.h>
 #include <devices/Faceshift.h>
 #include <NetworkingConstants.h>
+#include <ScriptEngines.h>
 
 #include "Application.h"
 #include "DialogsManager.h"
@@ -27,6 +28,7 @@
 #include "Snapshot.h"
 #include "UserActivityLogger.h"
 #include "UIUtil.h"
+#include "scripting/WebWindowClass.h"
 
 
 const int PREFERENCES_HEIGHT_PADDING = 20;
@@ -44,10 +46,13 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) :
 
     connect(ui.buttonBrowseLocation, &QPushButton::clicked, this, &PreferencesDialog::openSnapshotLocationBrowser);
     connect(ui.buttonBrowseScriptsLocation, &QPushButton::clicked, this, &PreferencesDialog::openScriptsLocationBrowser);
-    connect(ui.buttonReloadDefaultScripts, &QPushButton::clicked, qApp, &Application::loadDefaultScripts);
+    connect(ui.buttonReloadDefaultScripts, &QPushButton::clicked, [] {
+        DependencyManager::get<ScriptEngines>()->loadDefaultScripts();
+    });
 
     connect(ui.buttonChangeAppearance, &QPushButton::clicked, this, &PreferencesDialog::openFullAvatarModelBrowser);
     connect(ui.appearanceDescription, &QLineEdit::editingFinished, this, &PreferencesDialog::changeFullAvatarURL);
+    connect(ui.useAcuityCheckBox, &QCheckBox::clicked, this, &PreferencesDialog::changeUseAcuity);
 
     connect(qApp, &Application::fullAvatarURLChanged, this, &PreferencesDialog::fullAvatarURLChanged);
 
@@ -58,6 +63,17 @@ PreferencesDialog::PreferencesDialog(QWidget* parent) :
     UIUtil::scaleWidgetFontSizes(this);
 }
 
+void PreferencesDialog::changeUseAcuity() {
+    bool useAcuity = ui.useAcuityCheckBox->isChecked();
+    ui.label_desktopMinimumFPSSpin->setEnabled(useAcuity);
+    ui.desktopMinimumFPSSpin->setEnabled(useAcuity);
+    ui.label_hmdMinimumFPSSpin->setEnabled(useAcuity);
+    ui.hmdMinimumFPSSpin->setEnabled(useAcuity);
+    ui.label_smallestReasonableRenderHorizon->setEnabled(!useAcuity);
+    ui.smallestReasonableRenderHorizon->setEnabled(!useAcuity);
+    Menu::getInstance()->getActionForOption(MenuOption::LodTools)->setEnabled(useAcuity);
+    Menu::getInstance()->getSubMenuFromName(MenuOption::RenderResolution, Menu::getInstance()->getSubMenuFromName("Render", Menu::getInstance()->getMenu("Developer")))->setEnabled(useAcuity);
+}
 void PreferencesDialog::changeFullAvatarURL() {
     DependencyManager::get<AvatarManager>()->getMyAvatar()->useFullAvatarURL(ui.appearanceDescription->text(), "");
     this->fullAvatarURLChanged(ui.appearanceDescription->text(), "");
@@ -120,29 +136,29 @@ void PreferencesDialog::openFullAvatarModelBrowser() {
     const auto WIDTH = 900;
     const auto HEIGHT = 700;
     if (!_marketplaceWindow) {
-        _marketplaceWindow = new WebWindowClass("Marketplace", MARKETPLACE_URL, WIDTH, HEIGHT, false);
+        _marketplaceWindow = new WebWindowClass("Marketplace", MARKETPLACE_URL, WIDTH, HEIGHT);
     }
     _marketplaceWindow->setVisible(true);
 
 }
 
 void PreferencesDialog::resizeEvent(QResizeEvent *resizeEvent) {
-    
+
     // keep buttons panel at the bottom
     ui.buttonsPanel->setGeometry(0,
                                  size().height() - ui.buttonsPanel->height(),
                                  size().width(),
                                  ui.buttonsPanel->height());
-    
+
     // set width and height of srcollarea to match bottom panel and width
     ui.scrollArea->setGeometry(ui.scrollArea->geometry().x(), ui.scrollArea->geometry().y(),
                                size().width(),
                                size().height() - ui.buttonsPanel->height() - ui.scrollArea->geometry().y());
-    
+
 }
 
 void PreferencesDialog::loadPreferences() {
-    
+
     MyAvatar* myAvatar = DependencyManager::get<AvatarManager>()->getMyAvatar();
     Menu* menuInstance = Menu::getInstance();
 
@@ -159,18 +175,18 @@ void PreferencesDialog::loadPreferences() {
 
     ui.snapshotLocationEdit->setText(Snapshot::snapshotsLocation.get());
 
-    ui.scriptsLocationEdit->setText(qApp->getScriptsLocation());
+    ui.scriptsLocationEdit->setText(DependencyManager::get<ScriptEngines>()->getScriptsLocation());
 
     ui.pupilDilationSlider->setValue(myAvatar->getHead()->getPupilDilation() *
                                      ui.pupilDilationSlider->maximum());
-    
+
     auto dde = DependencyManager::get<DdeFaceTracker>();
-    ui.ddeEyeClosingThresholdSlider->setValue(dde->getEyeClosingThreshold() * 
+    ui.ddeEyeClosingThresholdSlider->setValue(dde->getEyeClosingThreshold() *
                                               ui.ddeEyeClosingThresholdSlider->maximum());
 
     ui.faceTrackerEyeDeflectionSider->setValue(FaceTracker::getEyeDeflection() *
                                                ui.faceTrackerEyeDeflectionSider->maximum());
-    
+
     auto faceshift = DependencyManager::get<Faceshift>();
     ui.faceshiftHostnameEdit->setText(faceshift->getHostname());
 
@@ -196,12 +212,12 @@ void PreferencesDialog::loadPreferences() {
     ui.realWorldFieldOfViewSpin->setValue(myAvatar->getRealWorldFieldOfView());
 
     ui.fieldOfViewSpin->setValue(qApp->getFieldOfView());
-    
+
     ui.leanScaleSpin->setValue(myAvatar->getLeanScale());
 
     ui.avatarScaleSpin->setValue(myAvatar->getUniformScale());
     ui.avatarAnimationEdit->setText(myAvatar->getAnimGraphUrl().toString());
-    
+
     ui.maxOctreePPSSpin->setValue(qApp->getMaxOctreePacketsPerSecond());
 
 #if 0
@@ -212,17 +228,19 @@ void PreferencesDialog::loadPreferences() {
 
     // LOD items
     auto lodManager = DependencyManager::get<LODManager>();
+    ui.useAcuityCheckBox->setChecked(lodManager->getUseAcuity());
     ui.desktopMinimumFPSSpin->setValue(lodManager->getDesktopLODDecreaseFPS());
     ui.hmdMinimumFPSSpin->setValue(lodManager->getHMDLODDecreaseFPS());
-    ui.avatarRenderSmallestReasonableHorizon->setValue(1.0f / DependencyManager::get<AvatarManager>()->getRenderDistanceInverseHighLimit());
+    ui.smallestReasonableRenderHorizon->setValue(1.0f / lodManager->getRenderDistanceInverseHighLimit());
+    changeUseAcuity();
 }
 
 void PreferencesDialog::savePreferences() {
-    
+
     MyAvatar* myAvatar = DependencyManager::get<AvatarManager>()->getMyAvatar();
 
     bool shouldDispatchIdentityPacket = false;
-    
+
     QString displayNameStr(ui.displayNameEdit->text());
     if (displayNameStr != _displayNameString) {
         myAvatar->setDisplayName(displayNameStr);
@@ -233,7 +251,7 @@ void PreferencesDialog::savePreferences() {
     if (shouldDispatchIdentityPacket) {
         myAvatar->sendIdentityPacket();
     }
-    
+
     myAvatar->setCollisionSoundURL(ui.collisionSoundURLEdit->text());
 
     // MyAvatar persists its own data. If it doesn't agree with what the user has explicitly accepted, set it back to old values.
@@ -251,7 +269,7 @@ void PreferencesDialog::savePreferences() {
     }
 
     if (!ui.scriptsLocationEdit->text().isEmpty() && QDir(ui.scriptsLocationEdit->text()).exists()) {
-        qApp->setScriptsLocation(ui.scriptsLocationEdit->text());
+        DependencyManager::get<ScriptEngines>()->setScriptsLocation(ui.scriptsLocationEdit->text());
     }
 
     myAvatar->getHead()->setPupilDilation(ui.pupilDilationSlider->value() / (float)ui.pupilDilationSlider->maximum());
@@ -262,28 +280,28 @@ void PreferencesDialog::savePreferences() {
     }
 
     myAvatar->setRealWorldFieldOfView(ui.realWorldFieldOfViewSpin->value());
-    
+
     qApp->setFieldOfView(ui.fieldOfViewSpin->value());
-    
+
     auto dde = DependencyManager::get<DdeFaceTracker>();
-    dde->setEyeClosingThreshold(ui.ddeEyeClosingThresholdSlider->value() / 
+    dde->setEyeClosingThreshold(ui.ddeEyeClosingThresholdSlider->value() /
                                 (float)ui.ddeEyeClosingThresholdSlider->maximum());
 
     FaceTracker::setEyeDeflection(ui.faceTrackerEyeDeflectionSider->value() /
                                 (float)ui.faceTrackerEyeDeflectionSider->maximum());
-    
+
     auto faceshift = DependencyManager::get<Faceshift>();
     faceshift->setHostname(ui.faceshiftHostnameEdit->text());
-    
+
     qApp->setMaxOctreePacketsPerSecond(ui.maxOctreePPSSpin->value());
 
     qApp->getApplicationCompositor().setHmdUIAngularSize(ui.oculusUIAngularSizeSpin->value());
-    
+
     controller::InputDevice::setReticleMoveSpeed(ui.sixenseReticleMoveSpeedSpin->value());
 
     auto audio = DependencyManager::get<AudioClient>();
     MixedProcessedAudioStream& stream = audio->getReceivedAudioStream();
-    
+
     stream.setDynamicJitterBuffers(ui.dynamicJitterBuffersCheckBox->isChecked());
     stream.setStaticDesiredJitterBufferFrames(ui.staticDesiredJitterBufferFramesSpin->value());
     stream.setMaxFramesOverDesired(ui.maxFramesOverDesiredSpin->value());
@@ -303,7 +321,8 @@ void PreferencesDialog::savePreferences() {
 
     // LOD items
     auto lodManager = DependencyManager::get<LODManager>();
+    lodManager->setUseAcuity(ui.useAcuityCheckBox->isChecked());
     lodManager->setDesktopLODDecreaseFPS(ui.desktopMinimumFPSSpin->value());
     lodManager->setHMDLODDecreaseFPS(ui.hmdMinimumFPSSpin->value());
-    DependencyManager::get<AvatarManager>()->setRenderDistanceInverseHighLimit(1.0f / ui.avatarRenderSmallestReasonableHorizon->value());
+    lodManager->setRenderDistanceInverseHighLimit(1.0f / ui.smallestReasonableRenderHorizon->value());
 }

@@ -64,7 +64,8 @@ EntityItem::EntityItem(const EntityItemID& entityItemID) :
     _angularDamping(ENTITY_ITEM_DEFAULT_ANGULAR_DAMPING),
     _visible(ENTITY_ITEM_DEFAULT_VISIBLE),
     _ignoreForCollisions(ENTITY_ITEM_DEFAULT_IGNORE_FOR_COLLISIONS),
-    _collisionsWillMove(ENTITY_ITEM_DEFAULT_COLLISIONS_WILL_MOVE),
+    _collisionMask(ENTITY_COLLISION_MASK_DEFAULT),
+    _dynamic(ENTITY_ITEM_DEFAULT_DYNAMIC),
     _locked(ENTITY_ITEM_DEFAULT_LOCKED),
     _userData(ENTITY_ITEM_DEFAULT_USER_DATA),
     _simulationOwner(),
@@ -123,7 +124,8 @@ EntityPropertyFlags EntityItem::getEntityProperties(EncodeBitstreamParams& param
     requestedProperties += PROP_ANGULAR_DAMPING;
     requestedProperties += PROP_VISIBLE;
     requestedProperties += PROP_IGNORE_FOR_COLLISIONS;
-    requestedProperties += PROP_COLLISIONS_WILL_MOVE;
+    requestedProperties += PROP_COLLISION_MASK;
+    requestedProperties += PROP_DYNAMIC;
     requestedProperties += PROP_LOCKED;
     requestedProperties += PROP_USER_DATA;
     requestedProperties += PROP_MARKETPLACE_ID;
@@ -133,6 +135,7 @@ EntityPropertyFlags EntityItem::getEntityProperties(EncodeBitstreamParams& param
     requestedProperties += PROP_ACTION_DATA;
     requestedProperties += PROP_PARENT_ID;
     requestedProperties += PROP_PARENT_JOINT_INDEX;
+    requestedProperties += PROP_QUERY_AA_CUBE;
 
     return requestedProperties;
 }
@@ -258,7 +261,8 @@ OctreeElement::AppendState EntityItem::appendEntityData(OctreePacketData* packet
         APPEND_ENTITY_PROPERTY(PROP_ANGULAR_DAMPING, getAngularDamping());
         APPEND_ENTITY_PROPERTY(PROP_VISIBLE, getVisible());
         APPEND_ENTITY_PROPERTY(PROP_IGNORE_FOR_COLLISIONS, getIgnoreForCollisions());
-        APPEND_ENTITY_PROPERTY(PROP_COLLISIONS_WILL_MOVE, getCollisionsWillMove());
+        APPEND_ENTITY_PROPERTY(PROP_COLLISION_MASK, getCollisionMask());
+        APPEND_ENTITY_PROPERTY(PROP_DYNAMIC, getDynamic());
         APPEND_ENTITY_PROPERTY(PROP_LOCKED, getLocked());
         APPEND_ENTITY_PROPERTY(PROP_USER_DATA, getUserData());
         APPEND_ENTITY_PROPERTY(PROP_MARKETPLACE_ID, getMarketplaceID());
@@ -269,6 +273,7 @@ OctreeElement::AppendState EntityItem::appendEntityData(OctreePacketData* packet
         APPEND_ENTITY_PROPERTY(PROP_ACTION_DATA, getActionData());
         APPEND_ENTITY_PROPERTY(PROP_PARENT_ID, getParentID());
         APPEND_ENTITY_PROPERTY(PROP_PARENT_JOINT_INDEX, getParentJointIndex());
+        APPEND_ENTITY_PROPERTY(PROP_QUERY_AA_CUBE, getQueryAACube());
 
         appendSubclassData(packetData, params, entityTreeElementExtraEncodeData,
                                 requestedProperties,
@@ -676,7 +681,8 @@ int EntityItem::readEntityDataFromBuffer(const unsigned char* data, int bytesLef
     READ_ENTITY_PROPERTY(PROP_ANGULAR_DAMPING, float, updateAngularDamping);
     READ_ENTITY_PROPERTY(PROP_VISIBLE, bool, setVisible);
     READ_ENTITY_PROPERTY(PROP_IGNORE_FOR_COLLISIONS, bool, updateIgnoreForCollisions);
-    READ_ENTITY_PROPERTY(PROP_COLLISIONS_WILL_MOVE, bool, updateCollisionsWillMove);
+    READ_ENTITY_PROPERTY(PROP_COLLISION_MASK, uint8_t, updateCollisionMask);
+    READ_ENTITY_PROPERTY(PROP_DYNAMIC, bool, updateDynamic);
     READ_ENTITY_PROPERTY(PROP_LOCKED, bool, setLocked);
     READ_ENTITY_PROPERTY(PROP_USER_DATA, QString, setUserData);
 
@@ -692,6 +698,8 @@ int EntityItem::readEntityDataFromBuffer(const unsigned char* data, int bytesLef
 
     READ_ENTITY_PROPERTY(PROP_PARENT_ID, QUuid, setParentID);
     READ_ENTITY_PROPERTY(PROP_PARENT_JOINT_INDEX, quint16, setParentJointIndex);
+
+    READ_ENTITY_PROPERTY(PROP_QUERY_AA_CUBE, AACube, setQueryAACube);
 
     bytesRead += readEntitySubclassDataFromBuffer(dataAt, (bytesLeftToRead - bytesRead), args,
                                                   propertyFlags, overwriteLocalData, somethingChanged);
@@ -1037,7 +1045,8 @@ EntityItemProperties EntityItem::getProperties(EntityPropertyFlags desiredProper
     COPY_ENTITY_PROPERTY_TO_PROPERTIES(localRenderAlpha, getLocalRenderAlpha);
     COPY_ENTITY_PROPERTY_TO_PROPERTIES(visible, getVisible);
     COPY_ENTITY_PROPERTY_TO_PROPERTIES(ignoreForCollisions, getIgnoreForCollisions);
-    COPY_ENTITY_PROPERTY_TO_PROPERTIES(collisionsWillMove, getCollisionsWillMove);
+    COPY_ENTITY_PROPERTY_TO_PROPERTIES(collisionMask, getCollisionMask);
+    COPY_ENTITY_PROPERTY_TO_PROPERTIES(dynamic, getDynamic);
     COPY_ENTITY_PROPERTY_TO_PROPERTIES(locked, getLocked);
     COPY_ENTITY_PROPERTY_TO_PROPERTIES(userData, getUserData);
     COPY_ENTITY_PROPERTY_TO_PROPERTIES(marketplaceID, getMarketplaceID);
@@ -1047,6 +1056,9 @@ EntityItemProperties EntityItem::getProperties(EntityPropertyFlags desiredProper
     COPY_ENTITY_PROPERTY_TO_PROPERTIES(actionData, getActionData);
     COPY_ENTITY_PROPERTY_TO_PROPERTIES(parentID, getParentID);
     COPY_ENTITY_PROPERTY_TO_PROPERTIES(parentJointIndex, getParentJointIndex);
+    COPY_ENTITY_PROPERTY_TO_PROPERTIES(queryAACube, getQueryAACube);
+    COPY_ENTITY_PROPERTY_TO_PROPERTIES(localPosition, getLocalPosition);
+    COPY_ENTITY_PROPERTY_TO_PROPERTIES(localRotation, getLocalOrientation);
 
     properties._defaultSettings = false;
 
@@ -1091,7 +1103,8 @@ bool EntityItem::setProperties(const EntityItemProperties& properties) {
     SET_ENTITY_PROPERTY_FROM_PROPERTIES(restitution, updateRestitution);
     SET_ENTITY_PROPERTY_FROM_PROPERTIES(friction, updateFriction);
     SET_ENTITY_PROPERTY_FROM_PROPERTIES(ignoreForCollisions, updateIgnoreForCollisions);
-    SET_ENTITY_PROPERTY_FROM_PROPERTIES(collisionsWillMove, updateCollisionsWillMove);
+    SET_ENTITY_PROPERTY_FROM_PROPERTIES(collisionMask, updateCollisionMask);
+    SET_ENTITY_PROPERTY_FROM_PROPERTIES(dynamic, updateDynamic);
     SET_ENTITY_PROPERTY_FROM_PROPERTIES(created, updateCreated);
     SET_ENTITY_PROPERTY_FROM_PROPERTIES(lifetime, updateLifetime);
 
@@ -1111,6 +1124,7 @@ bool EntityItem::setProperties(const EntityItemProperties& properties) {
     SET_ENTITY_PROPERTY_FROM_PROPERTIES(actionData, setActionData);
     SET_ENTITY_PROPERTY_FROM_PROPERTIES(parentID, setParentID);
     SET_ENTITY_PROPERTY_FROM_PROPERTIES(parentJointIndex, setParentJointIndex);
+    SET_ENTITY_PROPERTY_FROM_PROPERTIES(queryAACube, setQueryAACube);
 
     if (somethingChanged) {
         uint64_t now = usecTimestampNow();
@@ -1152,8 +1166,8 @@ void EntityItem::recordCreationTime() {
     _lastSimulated = now;
 }
 
-const Transform EntityItem::getTransformToCenter() const {
-    Transform result = getTransform();
+const Transform EntityItem::getTransformToCenter(bool& success) const {
+    Transform result = getTransform(success);
     if (getRegistrationPoint() != ENTITY_ITEM_HALF_VEC3) { // If it is not already centered, translate to center
         result.postTranslate(ENTITY_ITEM_HALF_VEC3 - getRegistrationPoint()); // Position to center
     }
@@ -1171,28 +1185,31 @@ void EntityItem::setDimensions(const glm::vec3& value) {
 /// The maximum bounding cube for the entity, independent of it's rotation.
 /// This accounts for the registration point (upon which rotation occurs around).
 ///
-const AACube& EntityItem::getMaximumAACube() const {
+AACube EntityItem::getMaximumAACube(bool& success) const {
     if (_recalcMaxAACube) {
         // * we know that the position is the center of rotation
-        glm::vec3 centerOfRotation = getPosition(); // also where _registration point is
+        glm::vec3 centerOfRotation = getPosition(success); // also where _registration point is
+        if (success) {
+            // * we know that the registration point is the center of rotation
+            // * we can calculate the length of the furthest extent from the registration point
+            //   as the dimensions * max (registrationPoint, (1.0,1.0,1.0) - registrationPoint)
+            glm::vec3 registrationPoint = (getDimensions() * getRegistrationPoint());
+            glm::vec3 registrationRemainder = (getDimensions() * (glm::vec3(1.0f, 1.0f, 1.0f) - getRegistrationPoint()));
+            glm::vec3 furthestExtentFromRegistration = glm::max(registrationPoint, registrationRemainder);
 
-        // * we know that the registration point is the center of rotation
-        // * we can calculate the length of the furthest extent from the registration point
-        //   as the dimensions * max (registrationPoint, (1.0,1.0,1.0) - registrationPoint)
-        glm::vec3 registrationPoint = (getDimensions() * getRegistrationPoint());
-        glm::vec3 registrationRemainder = (getDimensions() * (glm::vec3(1.0f, 1.0f, 1.0f) - getRegistrationPoint()));
-        glm::vec3 furthestExtentFromRegistration = glm::max(registrationPoint, registrationRemainder);
+            // * we know that if you rotate in any direction you would create a sphere
+            //   that has a radius of the length of furthest extent from registration point
+            float radius = glm::length(furthestExtentFromRegistration);
 
-        // * we know that if you rotate in any direction you would create a sphere
-        //   that has a radius of the length of furthest extent from registration point
-        float radius = glm::length(furthestExtentFromRegistration);
+            // * we know that the minimum bounding cube of this maximum possible sphere is
+            //   (center - radius) to (center + radius)
+            glm::vec3 minimumCorner = centerOfRotation - glm::vec3(radius, radius, radius);
 
-        // * we know that the minimum bounding cube of this maximum possible sphere is
-        //   (center - radius) to (center + radius)
-        glm::vec3 minimumCorner = centerOfRotation - glm::vec3(radius, radius, radius);
-
-        _maxAACube = AACube(minimumCorner, radius * 2.0f);
-        _recalcMaxAACube = false;
+            _maxAACube = AACube(minimumCorner, radius * 2.0f);
+            _recalcMaxAACube = false;
+        }
+    } else {
+        success = true;
     }
     return _maxAACube;
 }
@@ -1200,7 +1217,7 @@ const AACube& EntityItem::getMaximumAACube() const {
 /// The minimum bounding cube for the entity accounting for it's rotation.
 /// This accounts for the registration point (upon which rotation occurs around).
 ///
-const AACube& EntityItem::getMinimumAACube() const {
+AACube EntityItem::getMinimumAACube(bool& success) const {
     if (_recalcMinAACube) {
         // _position represents the position of the registration point.
         glm::vec3 registrationRemainder = glm::vec3(1.0f, 1.0f, 1.0f) - _registrationPoint;
@@ -1208,25 +1225,30 @@ const AACube& EntityItem::getMinimumAACube() const {
         glm::vec3 unrotatedMinRelativeToEntity = - (getDimensions() * getRegistrationPoint());
         glm::vec3 unrotatedMaxRelativeToEntity = getDimensions() * registrationRemainder;
         Extents unrotatedExtentsRelativeToRegistrationPoint = { unrotatedMinRelativeToEntity, unrotatedMaxRelativeToEntity };
-        Extents rotatedExtentsRelativeToRegistrationPoint = unrotatedExtentsRelativeToRegistrationPoint.getRotated(getRotation());
+        Extents rotatedExtentsRelativeToRegistrationPoint =
+            unrotatedExtentsRelativeToRegistrationPoint.getRotated(getRotation());
 
         // shift the extents to be relative to the position/registration point
-        rotatedExtentsRelativeToRegistrationPoint.shiftBy(getPosition());
+        rotatedExtentsRelativeToRegistrationPoint.shiftBy(getPosition(success));
 
-        // the cube that best encompasses extents is...
-        AABox box(rotatedExtentsRelativeToRegistrationPoint);
-        glm::vec3 centerOfBox = box.calcCenter();
-        float longestSide = box.getLargestDimension();
-        float halfLongestSide = longestSide / 2.0f;
-        glm::vec3 cornerOfCube = centerOfBox - glm::vec3(halfLongestSide, halfLongestSide, halfLongestSide);
+        if (success) {
+            // the cube that best encompasses extents is...
+            AABox box(rotatedExtentsRelativeToRegistrationPoint);
+            glm::vec3 centerOfBox = box.calcCenter();
+            float longestSide = box.getLargestDimension();
+            float halfLongestSide = longestSide / 2.0f;
+            glm::vec3 cornerOfCube = centerOfBox - glm::vec3(halfLongestSide, halfLongestSide, halfLongestSide);
 
-        _minAACube = AACube(cornerOfCube, longestSide);
-        _recalcMinAACube = false;
+            _minAACube = AACube(cornerOfCube, longestSide);
+            _recalcMinAACube = false;
+        }
+    } else {
+        success = true;
     }
     return _minAACube;
 }
 
-const AABox& EntityItem::getAABox() const {
+AABox EntityItem::getAABox(bool& success) const {
     if (_recalcAABox) {
         // _position represents the position of the registration point.
         glm::vec3 registrationRemainder = glm::vec3(1.0f, 1.0f, 1.0f) - _registrationPoint;
@@ -1234,16 +1256,36 @@ const AABox& EntityItem::getAABox() const {
         glm::vec3 unrotatedMinRelativeToEntity = - (getDimensions() * _registrationPoint);
         glm::vec3 unrotatedMaxRelativeToEntity = getDimensions() * registrationRemainder;
         Extents unrotatedExtentsRelativeToRegistrationPoint = { unrotatedMinRelativeToEntity, unrotatedMaxRelativeToEntity };
-        Extents rotatedExtentsRelativeToRegistrationPoint = unrotatedExtentsRelativeToRegistrationPoint.getRotated(getRotation());
+        Extents rotatedExtentsRelativeToRegistrationPoint =
+            unrotatedExtentsRelativeToRegistrationPoint.getRotated(getRotation());
 
         // shift the extents to be relative to the position/registration point
-        rotatedExtentsRelativeToRegistrationPoint.shiftBy(getPosition());
+        rotatedExtentsRelativeToRegistrationPoint.shiftBy(getPosition(success));
 
-        _cachedAABox = AABox(rotatedExtentsRelativeToRegistrationPoint);
-        _recalcAABox = false;
+        if (success) {
+            _cachedAABox = AABox(rotatedExtentsRelativeToRegistrationPoint);
+            _recalcAABox = false;
+        }
+    } else {
+        success = true;
     }
     return _cachedAABox;
 }
+
+AACube EntityItem::getQueryAACube(bool& success) const {
+    AACube result = SpatiallyNestable::getQueryAACube(success);
+    if (success) {
+        return result;
+    }
+    // this is for when we've loaded an older json file that didn't have queryAACube properties.
+    result = getMaximumAACube(success);
+    if (success) {
+        _queryAACube = result;
+        _queryAACubeSet = true;
+    }
+    return result;
+}
+
 
 // NOTE: This should only be used in cases of old bitstreams which only contain radius data
 //    0,0,0 --> maxDimension,maxDimension,maxDimension
@@ -1274,7 +1316,9 @@ float EntityItem::getRadius() const {
 
 bool EntityItem::contains(const glm::vec3& point) const {
     if (getShapeType() == SHAPE_TYPE_COMPOUND) {
-        return getAABox().contains(point);
+        bool success;
+        bool result = getAABox(success).contains(point);
+        return result && success;
     } else {
         ShapeInfo info;
         info.setParams(getShapeType(), glm::vec3(0.5f));
@@ -1409,9 +1453,16 @@ void EntityItem::updateIgnoreForCollisions(bool value) {
     }
 }
 
-void EntityItem::updateCollisionsWillMove(bool value) {
-    if (_collisionsWillMove != value) {
-        _collisionsWillMove = value;
+void EntityItem::updateCollisionMask(uint8_t value) {
+    if ((_collisionMask & ENTITY_COLLISION_MASK_DEFAULT) != (value & ENTITY_COLLISION_MASK_DEFAULT)) {
+        _collisionMask = (value & ENTITY_COLLISION_MASK_DEFAULT);
+        _dirtyFlags |= Simulation::DIRTY_COLLISION_GROUP;
+    }
+}
+
+void EntityItem::updateDynamic(bool value) {
+    if (_dynamic != value) {
+        _dynamic = value;
         _dirtyFlags |= Simulation::DIRTY_MOTION_TYPE;
     }
 }

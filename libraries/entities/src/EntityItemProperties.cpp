@@ -82,7 +82,7 @@ void EntityItemProperties::debugDump() const {
     getAtmosphere().debugDump();
     getSkybox().debugDump();
     getKeyLight().debugDump();
-    
+
     qCDebug(entities) << "   changed properties...";
     EntityPropertyFlags props = getChangedProperties();
     props.debugDumpBits();
@@ -114,6 +114,59 @@ void buildStringToShapeTypeLookup() {
     addShapeType(SHAPE_TYPE_CYLINDER_X);
     addShapeType(SHAPE_TYPE_CYLINDER_Y);
     addShapeType(SHAPE_TYPE_CYLINDER_Z);
+}
+
+QString getCollisionGroupAsString(uint8_t group) {
+    switch (group) {
+        case USER_COLLISION_GROUP_DYNAMIC:
+            return "dynamic";
+        case USER_COLLISION_GROUP_STATIC:
+            return "static";
+        case USER_COLLISION_GROUP_KINEMATIC:
+            return "kinematic";
+        case USER_COLLISION_GROUP_MY_AVATAR:
+            return "myAvatar";
+        case USER_COLLISION_GROUP_OTHER_AVATAR:
+            return "otherAvatar";
+    };
+    return "";
+}
+
+uint8_t getCollisionGroupAsBitMask(const QStringRef& name) {
+    if (0 == name.compare("dynamic")) {
+        return USER_COLLISION_GROUP_DYNAMIC;
+    } else if (0 == name.compare("static")) {
+        return USER_COLLISION_GROUP_STATIC;
+    } else if (0 == name.compare("kinematic")) {
+        return USER_COLLISION_GROUP_KINEMATIC;
+    } else if (0 == name.compare("myAvatar")) {
+        return USER_COLLISION_GROUP_MY_AVATAR;
+    } else if (0 == name.compare("otherAvatar")) {
+        return USER_COLLISION_GROUP_OTHER_AVATAR;
+    }
+    return 0;
+}
+
+QString EntityItemProperties::getCollisionMaskAsString() const {
+    QString maskString("");
+    for (int i = 0; i < NUM_USER_COLLISION_GROUPS; ++i) {
+        uint8_t group = 0x01 << i;
+        if (group & _collisionMask) {
+            maskString.append(getCollisionGroupAsString(group));
+            maskString.append(',');
+        }
+    }
+    return maskString;
+}
+
+void EntityItemProperties::setCollisionMaskFromString(const QString& maskString) {
+    QVector<QStringRef> groups = maskString.splitRef(',');
+    uint8_t mask = 0x00;
+    for (auto group : groups) {
+        mask |= getCollisionGroupAsBitMask(group);
+    }
+    _collisionMask = mask;
+    _collisionMaskChanged = true;
 }
 
 QString EntityItemProperties::getShapeTypeAsString() const {
@@ -203,7 +256,8 @@ EntityPropertyFlags EntityItemProperties::getChangedProperties() const {
     CHECK_PROPERTY_CHANGE(PROP_ANGULAR_VELOCITY, angularVelocity);
     CHECK_PROPERTY_CHANGE(PROP_ANGULAR_DAMPING, angularDamping);
     CHECK_PROPERTY_CHANGE(PROP_IGNORE_FOR_COLLISIONS, ignoreForCollisions);
-    CHECK_PROPERTY_CHANGE(PROP_COLLISIONS_WILL_MOVE, collisionsWillMove);
+    CHECK_PROPERTY_CHANGE(PROP_COLLISION_MASK, collisionMask);
+    CHECK_PROPERTY_CHANGE(PROP_DYNAMIC, dynamic);
     CHECK_PROPERTY_CHANGE(PROP_IS_SPOTLIGHT, isSpotlight);
     CHECK_PROPERTY_CHANGE(PROP_INTENSITY, intensity);
     CHECK_PROPERTY_CHANGE(PROP_EXPONENT, exponent);
@@ -262,6 +316,13 @@ EntityPropertyFlags EntityItemProperties::getChangedProperties() const {
     CHECK_PROPERTY_CHANGE(PROP_Z_P_NEIGHBOR_ID, zPNeighborID);
     CHECK_PROPERTY_CHANGE(PROP_PARENT_ID, parentID);
     CHECK_PROPERTY_CHANGE(PROP_PARENT_JOINT_INDEX, parentJointIndex);
+    CHECK_PROPERTY_CHANGE(PROP_JOINT_ROTATIONS_SET, jointRotationsSet);
+    CHECK_PROPERTY_CHANGE(PROP_JOINT_ROTATIONS, jointRotations);
+    CHECK_PROPERTY_CHANGE(PROP_JOINT_TRANSLATIONS_SET, jointTranslationsSet);
+    CHECK_PROPERTY_CHANGE(PROP_JOINT_TRANSLATIONS, jointTranslations);
+    CHECK_PROPERTY_CHANGE(PROP_QUERY_AA_CUBE, queryAACube);
+    CHECK_PROPERTY_CHANGE(PROP_LOCAL_POSITION, localPosition);
+    CHECK_PROPERTY_CHANGE(PROP_LOCAL_ROTATION, localRotation);
 
     changedProperties += _animation.getChangedProperties();
     changedProperties += _keyLight.getChangedProperties();
@@ -312,7 +373,9 @@ QScriptValue EntityItemProperties::copyToScriptValue(QScriptEngine* engine, bool
     COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_ANGULAR_DAMPING, angularDamping);
     COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_VISIBLE, visible);
     COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_IGNORE_FOR_COLLISIONS, ignoreForCollisions);
-    COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_COLLISIONS_WILL_MOVE, collisionsWillMove);
+    COPY_PROPERTY_TO_QSCRIPTVALUE_GETTER(PROP_COLLISION_MASK, collisionMask, getCollisionMaskAsString());
+    COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_DYNAMIC, dynamic);
+    COPY_PROXY_PROPERTY_TO_QSCRIPTVALUE_GETTER(PROP_DYNAMIC, dynamic, collisionsWillMove, getDynamic()); // legacy support
     COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_HREF, href);
     COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_DESCRIPTION, description);
     COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_FACE_CAMERA, faceCamera);
@@ -355,18 +418,26 @@ QScriptValue EntityItemProperties::copyToScriptValue(QScriptEngine* engine, bool
         COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_ALPHA_START, alphaStart);
         COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_ALPHA_FINISH, alphaFinish);
         COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_EMITTER_SHOULD_TRAIL, emitterShouldTrail);
-        COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_LOCAL_POSITION, localPosition);
-        COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_LOCAL_ROTATION, localRotation);
     }
 
     // Models only
     if (_type == EntityTypes::Model) {
         COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_MODEL_URL, modelURL);
         _animation.copyToScriptValue(_desiredProperties, properties, engine, skipDefaults, defaultEntityProperties);
+        COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_JOINT_ROTATIONS_SET, jointRotationsSet);
+        COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_JOINT_ROTATIONS, jointRotations);
+        COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_JOINT_TRANSLATIONS_SET, jointTranslationsSet);
+        COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_JOINT_TRANSLATIONS, jointTranslations);
     }
 
     if (_type == EntityTypes::Model || _type == EntityTypes::Zone || _type == EntityTypes::ParticleEffect) {
         COPY_PROPERTY_TO_QSCRIPTVALUE_GETTER(PROP_SHAPE_TYPE, shapeType, getShapeTypeAsString());
+    }
+    if (_type == EntityTypes::Box) {
+        COPY_PROPERTY_TO_QSCRIPTVALUE_GETTER(PROP_SHAPE_TYPE, shapeType, QString("Box"));
+    }
+    if (_type == EntityTypes::Sphere) {
+        COPY_PROPERTY_TO_QSCRIPTVALUE_GETTER(PROP_SHAPE_TYPE, shapeType, QString("Sphere"));
     }
 
     // FIXME - it seems like ParticleEffect should also support this
@@ -398,7 +469,7 @@ QScriptValue EntityItemProperties::copyToScriptValue(QScriptEngine* engine, bool
     // Zones only
     if (_type == EntityTypes::Zone) {
         _keyLight.copyToScriptValue(_desiredProperties, properties, engine, skipDefaults, defaultEntityProperties);
-        
+
         COPY_PROPERTY_TO_QSCRIPTVALUE_GETTER(PROP_BACKGROUND_MODE, backgroundMode, getBackgroundModeAsString());
 
         _stage.copyToScriptValue(_desiredProperties, properties, engine, skipDefaults, defaultEntityProperties);
@@ -473,9 +544,17 @@ QScriptValue EntityItemProperties::copyToScriptValue(QScriptEngine* engine, bool
 
     COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_PARENT_ID, parentID);
     COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_PARENT_JOINT_INDEX, parentJointIndex);
+    COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_QUERY_AA_CUBE, queryAACube);
 
     COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_LOCAL_POSITION, localPosition);
     COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_LOCAL_ROTATION, localRotation);
+
+    COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_JOINT_ROTATIONS_SET, jointRotationsSet);
+    COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_JOINT_ROTATIONS, jointRotations);
+    COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_JOINT_TRANSLATIONS_SET, jointTranslationsSet);
+    COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_JOINT_TRANSLATIONS, jointTranslations);
+
+    COPY_PROPERTY_TO_QSCRIPTVALUE(PROP_QUERY_AA_CUBE, queryAACube);
 
     // FIXME - I don't think these properties are supported any more
     //COPY_PROPERTY_TO_QSCRIPTVALUE(glowLevel);
@@ -521,7 +600,9 @@ void EntityItemProperties::copyFromScriptValue(const QScriptValue& object, bool 
     COPY_PROPERTY_FROM_QSCRIPTVALUE(glowLevel, float, setGlowLevel);
     COPY_PROPERTY_FROM_QSCRIPTVALUE(localRenderAlpha, float, setLocalRenderAlpha);
     COPY_PROPERTY_FROM_QSCRIPTVALUE(ignoreForCollisions, bool, setIgnoreForCollisions);
-    COPY_PROPERTY_FROM_QSCRIPTVALUE(collisionsWillMove, bool, setCollisionsWillMove);
+    COPY_PROPERTY_FROM_QSCRITPTVALUE_ENUM(collisionMask, CollisionMask);
+    COPY_PROPERTY_FROM_QSCRIPTVALUE_GETTER(collisionsWillMove, bool, setDynamic, getDynamic); // legacy support
+    COPY_PROPERTY_FROM_QSCRIPTVALUE(dynamic, bool, setDynamic);
     COPY_PROPERTY_FROM_QSCRIPTVALUE(isSpotlight, bool, setIsSpotlight);
     COPY_PROPERTY_FROM_QSCRIPTVALUE(intensity, float, setIntensity);
     COPY_PROPERTY_FROM_QSCRIPTVALUE(exponent, float, setExponent);
@@ -601,9 +682,15 @@ void EntityItemProperties::copyFromScriptValue(const QScriptValue& object, bool 
 
     COPY_PROPERTY_FROM_QSCRIPTVALUE(parentID, QUuid, setParentID);
     COPY_PROPERTY_FROM_QSCRIPTVALUE(parentJointIndex, quint16, setParentJointIndex);
+    COPY_PROPERTY_FROM_QSCRIPTVALUE(queryAACube, AACube, setQueryAACube);
 
     COPY_PROPERTY_FROM_QSCRIPTVALUE(localPosition, glmVec3, setLocalPosition);
     COPY_PROPERTY_FROM_QSCRIPTVALUE(localRotation, glmQuat, setLocalRotation);
+
+    COPY_PROPERTY_FROM_QSCRIPTVALUE(jointRotationsSet, qVectorBool, setJointRotationsSet);
+    COPY_PROPERTY_FROM_QSCRIPTVALUE(jointRotations, qVectorQuat, setJointRotations);
+    COPY_PROPERTY_FROM_QSCRIPTVALUE(jointTranslationsSet, qVectorBool, setJointTranslationsSet);
+    COPY_PROPERTY_FROM_QSCRIPTVALUE(jointTranslations, qVectorVec3, setJointTranslations);
 
     _lastEdited = usecTimestampNow();
 }
@@ -646,7 +733,7 @@ static QHash<QString, EntityPropertyList> _propertyStringsToEnums;
 void EntityItemProperties::entityPropertyFlagsFromScriptValue(const QScriptValue& object, EntityPropertyFlags& flags) {
     static std::once_flag initMap;
 
-    std::call_once(initMap, [](){ 
+    std::call_once(initMap, [](){
         ADD_PROPERTY_TO_MAP(PROP_VISIBLE, Visible, visible, bool);
         ADD_PROPERTY_TO_MAP(PROP_POSITION, Position, position, glm::vec3);
         ADD_PROPERTY_TO_MAP(PROP_DIMENSIONS, Dimensions, dimensions, glm::vec3);
@@ -677,7 +764,9 @@ void EntityItemProperties::entityPropertyFlagsFromScriptValue(const QScriptValue
         ADD_PROPERTY_TO_MAP(PROP_ANGULAR_VELOCITY, AngularVelocity, angularVelocity, glm::vec3);
         ADD_PROPERTY_TO_MAP(PROP_ANGULAR_DAMPING, AngularDamping, angularDamping, float);
         ADD_PROPERTY_TO_MAP(PROP_IGNORE_FOR_COLLISIONS, IgnoreForCollisions, ignoreForCollisions, bool);
-        ADD_PROPERTY_TO_MAP(PROP_COLLISIONS_WILL_MOVE, CollisionsWillMove, collisionsWillMove, bool);
+        ADD_PROPERTY_TO_MAP(PROP_COLLISION_MASK, CollisionMask, collisionMask, uint8_t);
+        ADD_PROPERTY_TO_MAP(PROP_DYNAMIC, unused, collisionsWillMove, unused); // legacy support
+        ADD_PROPERTY_TO_MAP(PROP_DYNAMIC, unused, dynamic, unused);
         ADD_PROPERTY_TO_MAP(PROP_IS_SPOTLIGHT, IsSpotlight, isSpotlight, bool);
         ADD_PROPERTY_TO_MAP(PROP_INTENSITY, Intensity, intensity, float);
         ADD_PROPERTY_TO_MAP(PROP_EXPONENT, Exponent, exponent, float);
@@ -738,6 +827,17 @@ void EntityItemProperties::entityPropertyFlagsFromScriptValue(const QScriptValue
         ADD_PROPERTY_TO_MAP(PROP_X_P_NEIGHBOR_ID, XPNeighborID, xPNeighborID, EntityItemID);
         ADD_PROPERTY_TO_MAP(PROP_Y_P_NEIGHBOR_ID, YPNeighborID, yPNeighborID, EntityItemID);
         ADD_PROPERTY_TO_MAP(PROP_Z_P_NEIGHBOR_ID, ZPNeighborID, zPNeighborID, EntityItemID);
+
+        ADD_PROPERTY_TO_MAP(PROP_PARENT_ID, ParentID, parentID, QUuid);
+        ADD_PROPERTY_TO_MAP(PROP_PARENT_JOINT_INDEX, ParentJointIndex, parentJointIndex, uint16_t);
+
+        ADD_PROPERTY_TO_MAP(PROP_LOCAL_POSITION, LocalPosition, localPosition, glm::vec3);
+        ADD_PROPERTY_TO_MAP(PROP_LOCAL_ROTATION, LocalRotation, localRotation, glm::quat);
+
+        ADD_PROPERTY_TO_MAP(PROP_JOINT_ROTATIONS_SET, JointRotationsSet, jointRotationsSet, QVector<bool>);
+        ADD_PROPERTY_TO_MAP(PROP_JOINT_ROTATIONS, JointRotations, jointRotations, QVector<glm::quat>);
+        ADD_PROPERTY_TO_MAP(PROP_JOINT_TRANSLATIONS_SET, JointTranslationsSet, jointTranslationsSet, QVector<bool>);
+        ADD_PROPERTY_TO_MAP(PROP_JOINT_TRANSLATIONS, JointTranslations, jointTranslations, QVector<glm::vec3>);
 
         ADD_GROUP_PROPERTY_TO_MAP(PROP_ANIMATION_URL, Animation, animation, URL, url);
         ADD_GROUP_PROPERTY_TO_MAP(PROP_ANIMATION_FPS, Animation, animation, FPS, fps);
@@ -915,13 +1015,15 @@ bool EntityItemProperties::encodeEntityEditPacket(PacketType command, EntityItem
             APPEND_ENTITY_PROPERTY(PROP_ANGULAR_DAMPING, properties.getAngularDamping());
             APPEND_ENTITY_PROPERTY(PROP_VISIBLE, properties.getVisible());
             APPEND_ENTITY_PROPERTY(PROP_IGNORE_FOR_COLLISIONS, properties.getIgnoreForCollisions());
-            APPEND_ENTITY_PROPERTY(PROP_COLLISIONS_WILL_MOVE, properties.getCollisionsWillMove());
+            APPEND_ENTITY_PROPERTY(PROP_COLLISION_MASK, properties.getCollisionMask());
+            APPEND_ENTITY_PROPERTY(PROP_DYNAMIC, properties.getDynamic());
             APPEND_ENTITY_PROPERTY(PROP_LOCKED, properties.getLocked());
             APPEND_ENTITY_PROPERTY(PROP_USER_DATA, properties.getUserData());
             APPEND_ENTITY_PROPERTY(PROP_HREF, properties.getHref());
             APPEND_ENTITY_PROPERTY(PROP_DESCRIPTION, properties.getDescription());
             APPEND_ENTITY_PROPERTY(PROP_PARENT_ID, properties.getParentID());
             APPEND_ENTITY_PROPERTY(PROP_PARENT_JOINT_INDEX, properties.getParentJointIndex());
+            APPEND_ENTITY_PROPERTY(PROP_QUERY_AA_CUBE, properties.getQueryAACube());
 
             if (properties.getType() == EntityTypes::Web) {
                 APPEND_ENTITY_PROPERTY(PROP_SOURCE_URL, properties.getSourceUrl());
@@ -943,6 +1045,11 @@ bool EntityItemProperties::encodeEntityEditPacket(PacketType command, EntityItem
 
                 _staticAnimation.setProperties(properties);
                 _staticAnimation.appendToEditPacket(packetData, requestedProperties, propertyFlags, propertiesDidntFit, propertyCount, appendState);
+
+                APPEND_ENTITY_PROPERTY(PROP_JOINT_ROTATIONS_SET, properties.getJointRotationsSet());
+                APPEND_ENTITY_PROPERTY(PROP_JOINT_ROTATIONS, properties.getJointRotations());
+                APPEND_ENTITY_PROPERTY(PROP_JOINT_TRANSLATIONS_SET, properties.getJointTranslationsSet());
+                APPEND_ENTITY_PROPERTY(PROP_JOINT_TRANSLATIONS, properties.getJointTranslations());
             }
 
             if (properties.getType() == EntityTypes::Light) {
@@ -986,7 +1093,7 @@ bool EntityItemProperties::encodeEntityEditPacket(PacketType command, EntityItem
             if (properties.getType() == EntityTypes::Zone) {
                 _staticKeyLight.setProperties(properties);
                 _staticKeyLight.appendToEditPacket(packetData, requestedProperties, propertyFlags, propertiesDidntFit, propertyCount, appendState);
-                                                   
+
                 _staticStage.setProperties(properties);
                 _staticStage.appendToEditPacket(packetData, requestedProperties, propertyFlags, propertiesDidntFit, propertyCount, appendState);
 
@@ -1021,7 +1128,7 @@ bool EntityItemProperties::encodeEntityEditPacket(PacketType command, EntityItem
                 APPEND_ENTITY_PROPERTY(PROP_LINE_WIDTH, properties.getLineWidth());
                 APPEND_ENTITY_PROPERTY(PROP_LINE_POINTS, properties.getLinePoints());
             }
-            
+
             if (properties.getType() == EntityTypes::PolyLine) {
                 APPEND_ENTITY_PROPERTY(PROP_LINE_WIDTH, properties.getLineWidth());
                 APPEND_ENTITY_PROPERTY(PROP_LINE_POINTS, properties.getLinePoints());
@@ -1029,7 +1136,7 @@ bool EntityItemProperties::encodeEntityEditPacket(PacketType command, EntityItem
                 APPEND_ENTITY_PROPERTY(PROP_STROKE_WIDTHS, properties.getStrokeWidths());
                 APPEND_ENTITY_PROPERTY(PROP_TEXTURES, properties.getTextures());
             }
-            
+
             APPEND_ENTITY_PROPERTY(PROP_MARKETPLACE_ID, properties.getMarketplaceID());
             APPEND_ENTITY_PROPERTY(PROP_NAME, properties.getName());
             APPEND_ENTITY_PROPERTY(PROP_COLLISION_SOUND_URL, properties.getCollisionSoundURL());
@@ -1117,7 +1224,7 @@ bool EntityItemProperties::encodeEntityEditPacket(PacketType command, EntityItem
 bool EntityItemProperties::decodeEntityEditPacket(const unsigned char* data, int bytesToRead, int& processedBytes,
                                                   EntityItemID& entityID, EntityItemProperties& properties) {
     bool valid = false;
-    
+
     const unsigned char* dataAt = data;
     processedBytes = 0;
 
@@ -1201,13 +1308,15 @@ bool EntityItemProperties::decodeEntityEditPacket(const unsigned char* data, int
     READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_ANGULAR_DAMPING, float, setAngularDamping);
     READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_VISIBLE, bool, setVisible);
     READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_IGNORE_FOR_COLLISIONS, bool, setIgnoreForCollisions);
-    READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_COLLISIONS_WILL_MOVE, bool, setCollisionsWillMove);
+    READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_COLLISION_MASK, uint8_t, setCollisionMask);
+    READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_DYNAMIC, bool, setDynamic);
     READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_LOCKED, bool, setLocked);
     READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_USER_DATA, QString, setUserData);
     READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_HREF, QString, setHref);
     READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_DESCRIPTION, QString, setDescription);
     READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_PARENT_ID, QUuid, setParentID);
     READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_PARENT_JOINT_INDEX, quint16, setParentJointIndex);
+    READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_QUERY_AA_CUBE, AACube, setQueryAACube);
 
     if (properties.getType() == EntityTypes::Web) {
         READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_SOURCE_URL, QString, setSourceUrl);
@@ -1228,6 +1337,11 @@ bool EntityItemProperties::decodeEntityEditPacket(const unsigned char* data, int
         READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_SHAPE_TYPE, ShapeType, setShapeType);
 
         properties.getAnimation().decodeFromEditPacket(propertyFlags, dataAt, processedBytes);
+
+        READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_JOINT_ROTATIONS_SET, QVector<bool>, setJointRotationsSet);
+        READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_JOINT_ROTATIONS, QVector<glm::quat>, setJointRotations);
+        READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_JOINT_TRANSLATIONS_SET, QVector<bool>, setJointTranslationsSet);
+        READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_JOINT_TRANSLATIONS, QVector<glm::vec3>, setJointTranslations);
     }
 
     if (properties.getType() == EntityTypes::Light) {
@@ -1298,8 +1412,8 @@ bool EntityItemProperties::decodeEntityEditPacket(const unsigned char* data, int
         READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_LINE_WIDTH, float, setLineWidth);
         READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_LINE_POINTS, QVector<glm::vec3>, setLinePoints);
     }
-    
-    
+
+
     if (properties.getType() == EntityTypes::PolyLine) {
         READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_LINE_WIDTH, float, setLineWidth);
         READ_ENTITY_PROPERTY_TO_PROPERTIES(PROP_LINE_POINTS, QVector<glm::vec3>, setLinePoints);
@@ -1376,7 +1490,8 @@ void EntityItemProperties::markAllChanged() {
     _localRenderAlphaChanged = true;
     _isSpotlightChanged = true;
     _ignoreForCollisionsChanged = true;
-    _collisionsWillMoveChanged = true;
+    _collisionMaskChanged = true;
+    _dynamicChanged = true;
 
     _intensityChanged = true;
     _exponentChanged = true;
@@ -1460,32 +1575,13 @@ void EntityItemProperties::markAllChanged() {
 
     _parentIDChanged = true;
     _parentJointIndexChanged = true;
-}
 
-/// The maximum bounding cube for the entity, independent of it's rotation.
-/// This accounts for the registration point (upon which rotation occurs around).
-///
-AACube EntityItemProperties::getMaximumAACube() const {
-    // * we know that the position is the center of rotation
-    glm::vec3 centerOfRotation = _position; // also where _registration point is
+    _jointRotationsSetChanged = true;
+    _jointRotationsChanged = true;
+    _jointTranslationsSetChanged = true;
+    _jointTranslationsChanged = true;
 
-    // * we know that the registration point is the center of rotation
-    // * we can calculate the length of the furthest extent from the registration point
-    //   as the dimensions * max (registrationPoint, (1.0,1.0,1.0) - registrationPoint)
-    glm::vec3 registrationPoint = (_dimensions * _registrationPoint);
-    glm::vec3 registrationRemainder = (_dimensions * (glm::vec3(1.0f, 1.0f, 1.0f) - _registrationPoint));
-    glm::vec3 furthestExtentFromRegistration = glm::max(registrationPoint, registrationRemainder);
-
-    // * we know that if you rotate in any direction you would create a sphere
-    //   that has a radius of the length of furthest extent from registration point
-    float radius = glm::length(furthestExtentFromRegistration);
-
-    // * we know that the minimum bounding cube of this maximum possible sphere is
-    //   (center - radius) to (center + radius)
-    glm::vec3 minimumCorner = centerOfRotation - glm::vec3(radius, radius, radius);
-    float diameter = radius * 2.0f;
-
-    return AACube(minimumCorner, diameter);
+    _queryAACubeChanged = true;
 }
 
 // The minimum bounding box for the entity.
@@ -1513,7 +1609,7 @@ bool EntityItemProperties::hasTerseUpdateChanges() const {
 bool EntityItemProperties::hasMiscPhysicsChanges() const {
     return _gravityChanged || _dimensionsChanged || _densityChanged || _frictionChanged
         || _restitutionChanged || _dampingChanged || _angularDampingChanged || _registrationPointChanged ||
-        _compoundShapeURLChanged || _collisionsWillMoveChanged || _ignoreForCollisionsChanged;
+        _compoundShapeURLChanged || _dynamicChanged || _ignoreForCollisionsChanged || _collisionMaskChanged;
 }
 
 void EntityItemProperties::clearSimulationOwner() {
@@ -1629,8 +1725,11 @@ QList<QString> EntityItemProperties::listChangedProperties() {
     if (ignoreForCollisionsChanged()) {
         out += "ignoreForCollisions";
     }
-    if (collisionsWillMoveChanged()) {
-        out += "collisionsWillMove";
+    if (collisionMaskChanged()) {
+        out += "collisionMask";
+    }
+    if (dynamicChanged()) {
+        out += "dynamic";
     }
     if (isSpotlightChanged()) {
         out += "isSpotlight";
@@ -1785,6 +1884,21 @@ QList<QString> EntityItemProperties::listChangedProperties() {
     if (parentJointIndexChanged()) {
         out += "parentJointIndex";
     }
+    if (jointRotationsSetChanged()) {
+        out += "jointRotationsSet";
+    }
+    if (jointRotationsChanged()) {
+        out += "jointRotations";
+    }
+    if (jointTranslationsSetChanged()) {
+        out += "jointTranslationsSet";
+    }
+    if (jointTranslationsChanged()) {
+        out += "jointTranslations";
+    }
+    if (queryAACubeChanged()) {
+        out += "queryAACube";
+    }
 
     getAnimation().listChangedProperties(out);
     getKeyLight().listChangedProperties(out);
@@ -1797,4 +1911,8 @@ QList<QString> EntityItemProperties::listChangedProperties() {
 
 bool EntityItemProperties::parentDependentPropertyChanged() const {
     return localPositionChanged() || positionChanged() || localRotationChanged() || rotationChanged();
+}
+
+bool EntityItemProperties::parentRelatedPropertyChanged() const {
+    return parentDependentPropertyChanged() || parentIDChanged() || parentJointIndexChanged();
 }

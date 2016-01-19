@@ -113,7 +113,6 @@
                 z: 504.5
             });
 
-
             createCombinedArmChair({
                 x: 549.29,
                 y: 494.9,
@@ -170,13 +169,15 @@
 
         function createRaveStick(position) {
             var modelURL = "http://hifi-content.s3.amazonaws.com/eric/models/raveStick.fbx";
+            var rotation = Quat.fromPitchYawRollDegrees(0, 0, 0);
             var stick = Entities.addEntity({
                 type: "Model",
                 name: "raveStick",
                 modelURL: modelURL,
+                rotation: rotation,
                 position: position,
                 shapeType: 'box',
-                collisionsWillMove: true,
+                dynamic: true,
                 script: raveStickEntityScriptURL,
                 dimensions: {
                     x: 0.06,
@@ -202,6 +203,66 @@
                             relativeRotation: Quat.fromPitchYawRollDegrees(90, 90, 0)
                         },
                         invertSolidWhileHeld: true
+                    }
+                })
+            });
+
+            var forwardVec = Quat.getFront(rotation);
+            var forwardQuat = Quat.rotationBetween(Vec3.UNIT_Z, forwardVec);
+            var color = {
+                red: 150,
+                green: 20,
+                blue: 100
+            }
+            var raveGlowEmitter = Entities.addEntity({
+                type: "ParticleEffect",
+                name: "Rave Stick Glow Emitter",
+                position: position,
+                parentID: stick,
+                isEmitting: true,
+                colorStart: color,
+                color: {
+                    red: 200,
+                    green: 200,
+                    blue: 255
+                },
+                colorFinish: color,
+                maxParticles: 100000,
+                lifespan: 0.8,
+                emitRate: 1000,
+                emitOrientation: forwardQuat,
+                emitSpeed: 0.2,
+                speedSpread: 0.0,
+                emitDimensions: {
+                    x: 0,
+                    y: 0,
+                    z: 0
+                },
+                polarStart: 0,
+                polarFinish: 0,
+                azimuthStart: 0.1,
+                azimuthFinish: 0.01,
+                emitAcceleration: {
+                    x: 0,
+                    y: 0,
+                    z: 0
+                },
+                accelerationSpread: {
+                    x: 0.00,
+                    y: 0.00,
+                    z: 0.00
+                },
+                radiusStart: 0.01,
+                radiusFinish: 0.005,
+                alpha: 0.7,
+                alphaSpread: 0.1,
+                alphaStart: 0.1,
+                alphaFinish: 0.1,
+                textures: "https://s3.amazonaws.com/hifi-public/eric/textures/particleSprites/beamParticle.png",
+                emitterShouldTrail: false,
+                userData: JSON.stringify({
+                    resetMe: {
+                        resetMe: true
                     }
                 })
             });
@@ -234,16 +295,21 @@
                     y: -3.0,
                     z: 0
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 userData: JSON.stringify({
                     grabbableKey: {
                         spatialKey: {
-                            relativePosition: {
-                                x: 0,
-                                y: 0,
-                                z: 0
+                            rightRelativePosition: {
+                                x: 0.03,
+                                y: 0.0,
+                                z: -0.065
                             },
-                            relativeRotation: Quat.fromPitchYawRollDegrees(45, 90, 0)
+                            leftRelativePosition: {
+                                x: -0.03,
+                                y: 0.00,
+                                z: -0.065
+                            },
+                            relativeRotation: Quat.fromPitchYawRollDegrees(90, 90, 0)
                         },
                         invertSolidWhileHeld: true
                     },
@@ -285,7 +351,7 @@
                 position: startPosition,
                 rotation: BOW_ROTATION,
                 dimensions: BOW_DIMENSIONS,
-                collisionsWillMove: true,
+                dynamic: true,
                 gravity: BOW_GRAVITY,
                 shapeType: 'compound',
                 compoundShapeURL: COLLISION_HULL_URL,
@@ -297,12 +363,17 @@
                     grabbableKey: {
                         invertSolidWhileHeld: true,
                         spatialKey: {
-                            relativePosition: {
-                                x: 0,
-                                y: 0.06,
+                            rightRelativePosition: {
+                                x: 0.03,
+                                y: 0.08,
                                 z: 0.11
                             },
-                            relativeRotation: Quat.fromPitchYawRollDegrees(0, -90, 90)
+                            leftRelativePosition: {
+                                x: -0.03,
+                                y: 0.08,
+                                z: 0.11
+                            },
+                            relativeRotation: Quat.fromPitchYawRollDegrees(180, 90, 90)
                         }
                     }
                 })
@@ -422,7 +493,7 @@
                     y: 1.37,
                     z: 1.73
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 ignoreForCollisions: false,
                 compoundShapeURL: rackCollisionHullURL,
                 userData: JSON.stringify({
@@ -470,7 +541,7 @@
                             y: -9.8,
                             z: 0
                         },
-                        collisionsWillMove: true,
+                        dynamic: true,
                         collisionSoundURL: 'http://hifi-public.s3.amazonaws.com/sounds/basketball/basketball.wav',
                         ignoreForCollisions: false,
                         modelURL: basketballURL,
@@ -615,7 +686,7 @@
                         type: 'Model',
                         modelURL: MODEL_URL,
                         shapeType: 'compound',
-                        collisionsWillMove: true,
+                        dynamic: true,
                         dimensions: TARGET_DIMENSIONS,
                         compoundShapeURL: COLLISION_HULL_URL,
                         position: position,
@@ -696,7 +767,7 @@
                     y: 0.30,
                     z: 0.08
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 collisionSoundURL: "http://hifi-public.s3.amazonaws.com/sounds/flashlight_drop.L.wav",
                 gravity: {
                     x: 0,
@@ -986,7 +1057,7 @@
                     z: 0
                 },
                 shapeType: "box",
-                collisionsWillMove: true,
+                dynamic: true,
                 userData: JSON.stringify({
                     resetMe: {
                         resetMe: true
@@ -1030,7 +1101,7 @@
                     z: 0.2
                 },
                 rotation: rotation,
-                collisionsWillMove: true,
+                dynamic: true,
                 gravity: {
                     x: 0,
                     y: -100,
@@ -1081,7 +1152,7 @@
                     y: 0.21,
                     z: 0.47
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 collisionSoundURL: COLLISION_SOUND_URL,
                 userData: JSON.stringify({
                     resetMe: {
@@ -1089,10 +1160,15 @@
                     },
                     grabbableKey: {
                         spatialKey: {
-                            relativePosition: {
+                            rightRelativePosition: {
                                 x: -0.05,
-                                y: 0,
-                                z: 0.0
+                                y: .06,
+                                z: 0.05
+                            },
+                            leftRelativePosition: {
+                                x: 0.05,
+                                y: 0.06,
+                                z: 0.05
                             },
                             relativeRotation: Quat.fromPitchYawRollDegrees(0, -90, -90)
                         },
@@ -1124,7 +1200,7 @@
                     z: 0.05
                 },
                 //must be enabled to be grabbable in the physics engine
-                collisionsWillMove: true,
+                dynamic: true,
                 compoundShapeURL: WAND_COLLISION_SHAPE,
                 script: wandScriptURL,
                 userData: JSON.stringify({
@@ -1155,7 +1231,7 @@
                 type: "Model",
                 modelURL: modelURL,
                 position: position,
-                collisionsWillMove: true,
+                dynamic: true,
                 shapeType: "sphere",
                 name: "basketball",
                 dimensions: {
@@ -1215,7 +1291,7 @@
                     y: -0.1,
                     z: 0
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 userData: JSON.stringify({
                     resetMe: {
                         resetMe: true
@@ -1243,7 +1319,7 @@
                     y: 0.17,
                     z: 0.07
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 collisionSoundURL: "http://hifi-public.s3.amazonaws.com/sounds/SpryPntCnDrp1.L.wav",
                 shapeType: 'box',
                 restitution: 0,
@@ -1282,7 +1358,7 @@
                     y: 2.18,
                     z: 1.07
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 shapeType: 'box',
                 gravity: {
                     x: 0,
@@ -1326,7 +1402,7 @@
                     y: 1.56,
                     z: 1.35
                 },
-                collisionsWillMove: true,
+                dynamic: true,
                 gravity: {
                     x: 0,
                     y: -0.8,
@@ -1408,7 +1484,7 @@
                         shapeType: 'box',
                         name: "block",
                         dimensions: blockTypes[i].dimensions,
-                        collisionsWillMove: true,
+                        dynamic: true,
                         collisionSoundURL: collisionSoundURL,
                         gravity: {
                             x: 0,

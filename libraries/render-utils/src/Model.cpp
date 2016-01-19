@@ -22,8 +22,8 @@
 #include <ViewFrustum.h>
 
 #include "AbstractViewStateInterface.h"
-#include "Model.h"
 #include "MeshPartPayload.h"
+#include "Model.h"
 
 #include "RenderUtilsLogging.h"
 
@@ -34,6 +34,8 @@ static int weakNetworkGeometryPointerTypeId = qRegisterMetaType<QWeakPointer<Net
 static int vec3VectorTypeId = qRegisterMetaType<QVector<glm::vec3> >();
 float Model::FAKE_DIMENSION_PLACEHOLDER = -1.0f;
 #define HTTP_INVALID_COM "http://invalid.com"
+
+model::MaterialPointer Model::_collisionHullMaterial;
 
 Model::Model(RigPointer rig, QObject* parent) :
     QObject(parent),
@@ -95,6 +97,9 @@ const float METERS_PER_MILLIMETER = 0.01f;
 void Model::setScaleInternal(const glm::vec3& scale) {
     if (glm::distance(_scale, scale) > METERS_PER_MILLIMETER) {
         _scale = scale;
+        if (_scale.x == 0.0f || _scale.y == 0.0f || _scale.z == 0.0f) {
+            assert(false);
+        }
         initJointTransforms();
     }
 }
@@ -971,11 +976,14 @@ void Model::updateRig(float deltaTime, glm::mat4 parentTransform) {
     _needsUpdateClusterMatrices = true;
     _rig->updateAnimations(deltaTime, parentTransform);
 }
+
 void Model::simulateInternal(float deltaTime) {
     // update the world space transforms for all joints
     glm::mat4 parentTransform = glm::scale(_scale) * glm::translate(_offset);
     updateRig(deltaTime, parentTransform);
 }
+
+// virtual
 void Model::updateClusterMatrices(glm::vec3 modelPosition, glm::quat modelOrientation) {
     PerformanceTimer perfTimer("Model::updateClusterMatrices");
 
@@ -1187,8 +1195,13 @@ void Model::segregateMeshGroups() {
         int totalParts = mesh.parts.size();
         for (int partIndex = 0; partIndex < totalParts; partIndex++) {
             if (showingCollisionHull) {
-                _renderItemsSet << std::make_shared<MeshPartPayload>(networkMesh._mesh, partIndex, ModelRender::getCollisionHullMaterial(), transform, offset);
-
+                if (!_collisionHullMaterial) {
+                    _collisionHullMaterial = std::make_shared<model::Material>();
+                    _collisionHullMaterial->setDiffuse(glm::vec3(1.0f, 0.5f, 0.0f));
+                    _collisionHullMaterial->setMetallic(0.02f);
+                    _collisionHullMaterial->setGloss(1.0f);
+                }
+                _renderItemsSet << std::make_shared<MeshPartPayload>(networkMesh._mesh, partIndex, _collisionHullMaterial, transform, offset);
             } else {
                 _renderItemsSet << std::make_shared<ModelMeshPartPayload>(this, i, partIndex, shapeID, transform, offset);
             }

@@ -17,7 +17,7 @@
 #include <QDialog>
 #include <QString>
 
-#include "scripting/WebWindowClass.h"
+class WebWindowClass;
 
 class PreferencesDialog : public QDialog {
     Q_OBJECT
@@ -41,7 +41,7 @@ private:
 
     QString _displayNameString;
     
-    WebWindowClass* _marketplaceWindow = NULL;
+    WebWindowClass* _marketplaceWindow { nullptr };
 
 private slots:
     void accept();
@@ -51,6 +51,7 @@ private slots:
     void openScriptsLocationBrowser();
     void changeFullAvatarURL();
     void fullAvatarURLChanged(const QString& newValue, const QString& modelName);
+    void changeUseAcuity();
 };
 
 #endif // hifi_PreferencesDialog_h

@@ -64,7 +64,7 @@ const float MIN_AVATAR_SPEED = 0.05f; // speed is set to zero below this
 
 // TODO: normalize avatar speed for standard avatar size, then scale all motion logic
 // to properly follow avatar size.
-float MAX_AVATAR_SPEED = 300.0f;
+float MAX_AVATAR_SPEED = 30.0f;
 float MAX_KEYBOARD_MOTOR_SPEED = MAX_AVATAR_SPEED;
 float DEFAULT_KEYBOARD_MOTOR_TIMESCALE = 0.25f;
 float MIN_SCRIPTED_MOTOR_TIMESCALE = 0.005f;
@@ -199,6 +199,11 @@ MyAvatar::MyAvatar(RigPointer rig) :
 
 MyAvatar::~MyAvatar() {
     _lookAtTargetAvatar.reset();
+}
+
+// virtual
+void MyAvatar::simulateAttachments(float deltaTime) {
+    // don't update attachments here, do it in harvestResultsFromPhysicsSimulation()
 }
 
 QByteArray MyAvatar::toByteArray(bool cullSmallChanges, bool sendAll) {
@@ -412,6 +417,8 @@ void MyAvatar::updateSensorToWorldMatrix() {
     // position when driven from the head.
     glm::mat4 desiredMat = createMatFromQuatAndPos(getOrientation(), getPosition());
     _sensorToWorldMatrix = desiredMat * glm::inverse(_bodySensorMatrix);
+
+    lateUpdatePalms();
 }
 
 //  Update avatar head rotation with sensor data
@@ -621,6 +628,7 @@ void MyAvatar::saveData() {
         settings.setValue("rotation_y", eulers.y);
         settings.setValue("rotation_z", eulers.z);
         settings.setValue("scale", attachment.scale);
+        settings.setValue("isSoft", attachment.isSoft);
     }
     settings.endArray();
 
@@ -702,6 +710,7 @@ void MyAvatar::loadData() {
         eulers.z = loadSetting(settings, "rotation_z", 0.0f);
         attachment.rotation = glm::quat(eulers);
         attachment.scale = loadSetting(settings, "scale", 1.0f);
+        attachment.isSoft = settings.value("isSoft").toBool();
         attachmentData.append(attachment);
     }
     settings.endArray();
@@ -1013,12 +1022,12 @@ void MyAvatar::useFullAvatarURL(const QUrl& fullAvatarURL, const QString& modelN
 }
 
 void MyAvatar::setAttachmentData(const QVector<AttachmentData>& attachmentData) {
-    Avatar::setAttachmentData(attachmentData);
     if (QThread::currentThread() != thread()) {
-        QMetaObject::invokeMethod(this, "setAttachmentData", Qt::DirectConnection,
+        QMetaObject::invokeMethod(this, "setAttachmentData", Qt::BlockingQueuedConnection,
                                   Q_ARG(const QVector<AttachmentData>, attachmentData));
         return;
     }
+    Avatar::setAttachmentData(attachmentData);
     _billboardValid = false;
 }
 
@@ -1057,7 +1066,7 @@ void MyAvatar::prepareForPhysicsSimulation() {
     _characterController.setFollowVelocity(_followVelocity);
 }
 
-void MyAvatar::harvestResultsFromPhysicsSimulation() {
+void MyAvatar::harvestResultsFromPhysicsSimulation(float deltaType) {
     glm::vec3 position = getPosition();
     glm::quat orientation = getOrientation();
     _characterController.getPositionAndOrientation(position, orientation);
@@ -1068,6 +1077,9 @@ void MyAvatar::harvestResultsFromPhysicsSimulation() {
     } else {
         setVelocity(_characterController.getLinearVelocity());
     }
+
+    // now that physics has adjusted our position, we can update attachements.
+    Avatar::simulateAttachments(deltaType);
 }
 
 void MyAvatar::adjustSensorTransform() {
@@ -1153,21 +1165,25 @@ void MyAvatar::setCollisionSoundURL(const QString& url) {
     }
 }
 
-void MyAvatar::attach(const QString& modelURL, const QString& jointName, const glm::vec3& translation,
-        const glm::quat& rotation, float scale, bool allowDuplicates, bool useSaved) {
+void MyAvatar::attach(const QString& modelURL, const QString& jointName,
+                      const glm::vec3& translation, const glm::quat& rotation,
+                      float scale, bool isSoft,
+                      bool allowDuplicates, bool useSaved) {
     if (QThread::currentThread() != thread()) {
-        Avatar::attach(modelURL, jointName, translation, rotation, scale, allowDuplicates, useSaved);
+        Avatar::attach(modelURL, jointName, translation, rotation, scale, isSoft, allowDuplicates, useSaved);
         return;
     }
     if (useSaved) {
         AttachmentData attachment = loadAttachmentData(modelURL, jointName);
         if (attachment.isValid()) {
-            Avatar::attach(modelURL, attachment.jointName, attachment.translation,
-                attachment.rotation, attachment.scale, allowDuplicates, useSaved);
+            Avatar::attach(modelURL, attachment.jointName,
+                           attachment.translation, attachment.rotation,
+                           attachment.scale, attachment.isSoft,
+                           allowDuplicates, useSaved);
             return;
         }
     }
-    Avatar::attach(modelURL, jointName, translation, rotation, scale, allowDuplicates, useSaved);
+    Avatar::attach(modelURL, jointName, translation, rotation, scale, isSoft, allowDuplicates, useSaved);
 }
 
 void MyAvatar::renderBody(RenderArgs* renderArgs, ViewFrustum* renderFrustum, float glowLevel) {
@@ -1599,7 +1615,7 @@ void MyAvatar::maybeUpdateBillboard() {
     if (_billboardValid || !(_skeletonModel.isLoadedWithTextures() && getHead()->getFaceModel().isLoadedWithTextures())) {
         return;
     }
-    foreach (Model* model, _attachmentModels) {
+    for (auto& model : _attachmentModels) {
         if (!model->isLoadedWithTextures()) {
             return;
         }
@@ -1690,24 +1706,6 @@ void MyAvatar::updateMotionBehaviorFromMenu() {
         _motionBehaviors &= ~AVATAR_MOTION_SCRIPTED_MOTOR_ENABLED;
     }
     _characterController.setEnabled(menu->isOptionChecked(MenuOption::EnableCharacterController));
-}
-
-//Gets the tip position for the laser pointer
-glm::vec3 MyAvatar::getLaserPointerTipPosition(const PalmData* palm) {
-    glm::vec3 direction = glm::normalize(palm->getTipPosition() - palm->getPosition());
-
-    glm::vec3 position = palm->getPosition();
-    //scale the position with the avatar
-    scaleVectorRelativeToPosition(position);
-
-
-    glm::vec3 result;
-    const auto& compositor = qApp->getApplicationCompositor();
-    if (compositor.calculateRayUICollisionPoint(position, direction, result)) {
-        return result;
-    }
-
-    return palm->getPosition();
 }
 
 void MyAvatar::clearDriveKeys() {
@@ -1828,4 +1826,9 @@ QScriptValue audioListenModeToScriptValue(QScriptEngine* engine, const AudioList
 
 void audioListenModeFromScriptValue(const QScriptValue& object, AudioListenerMode& audioListenerMode) {
     audioListenerMode = (AudioListenerMode)object.toUInt16();
+}
+
+
+void MyAvatar::lateUpdatePalms() {
+    Avatar::updatePalms();
 }

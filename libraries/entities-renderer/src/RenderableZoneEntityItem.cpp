@@ -14,7 +14,6 @@
 #include <gpu/Batch.h>
 
 #include <AbstractViewStateInterface.h>
-#include <DeferredLightingEffect.h>
 #include <DependencyManager.h>
 #include <GeometryCache.h>
 #include <PerfStat.h>
@@ -135,13 +134,17 @@ void RenderableZoneEntityItem::render(RenderArgs* args) {
                 gpu::Batch& batch = *args->_batch;
                 batch.setModelTransform(Transform());
 
-                auto shapeTransform = getTransformToCenter();
-                auto deferredLightingEffect = DependencyManager::get<DeferredLightingEffect>();
+                bool success;
+                auto shapeTransform = getTransformToCenter(success);
+                if (!success) {
+                    break;
+                }
+                auto geometryCache = DependencyManager::get<GeometryCache>();
                 if (getShapeType() == SHAPE_TYPE_SPHERE) {
                     shapeTransform.postScale(SPHERE_ENTITY_SCALE);
-                    deferredLightingEffect->renderWireSphereInstance(batch, shapeTransform, DEFAULT_COLOR);
+                    geometryCache->renderWireSphereInstance(batch, shapeTransform, DEFAULT_COLOR);
                 } else {
-                    deferredLightingEffect->renderWireCubeInstance(batch, shapeTransform, DEFAULT_COLOR);
+                    geometryCache->renderWireCubeInstance(batch, shapeTransform, DEFAULT_COLOR);
                 }
                 break;
             }
@@ -190,7 +193,12 @@ namespace render {
     
     template <> const Item::Bound payloadGetBound(const RenderableZoneEntityItemMeta::Pointer& payload) {
         if (payload && payload->entity) {
-            return payload->entity->getAABox();
+            bool success;
+            auto result = payload->entity->getAABox(success);
+            if (!success) {
+                return render::Item::Bound();
+            }
+            return result;
         }
         return render::Item::Bound();
     }

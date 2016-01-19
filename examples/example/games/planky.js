@@ -51,7 +51,7 @@ SettingsWindow = function() {
     this.plankyStack = null;
     this.webWindow = null;
     this.init = function(plankyStack) {
-        _this.webWindow = new WebWindow('Planky', Script.resolvePath('../../html/plankySettings.html'), 255, 500, true);
+        _this.webWindow = new OverlayWebWindow('Planky', Script.resolvePath('../../html/plankySettings.html'), 255, 500, true);
         _this.webWindow.setVisible(false);
         _this.webWindow.eventBridge.webEventReceived.connect(_this.onWebEventReceived);
         _this.plankyStack = plankyStack;
@@ -289,7 +289,7 @@ PlankyStack = function() {
         }
         if (!editMode) {
             _this.planks.forEach(function(plank, index, object) {
-                Entities.editEntity(plank.entity, {ignoreForCollisions: false, collisionsWillMove: true});
+                Entities.editEntity(plank.entity, {ignoreForCollisions: false, dynamic: true});
             });
         }
     };

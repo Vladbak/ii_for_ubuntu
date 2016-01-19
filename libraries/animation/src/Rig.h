@@ -71,8 +71,6 @@ public:
         glm::quat leftOrientation = glm::quat();  // rig space (z forward)
         glm::vec3 rightPosition = glm::vec3();    // rig space
         glm::quat rightOrientation = glm::quat(); // rig space (z forward)
-        float leftTrigger = 0.0f;
-        float rightTrigger = 0.0f;
     };
 
     virtual ~Rig() {}
@@ -91,6 +89,7 @@ public:
     bool jointStatesEmpty();
     int getJointStateCount() const;
     int indexOfJoint(const QString& jointName) const;
+    QString nameOfJoint(int jointIndex) const;
 
     void setModelOffset(const glm::mat4& modelOffsetMat);
 
