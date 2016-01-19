@@ -1,3 +1,4 @@
+/* UTII: WE DONT NEED THIS CODE
 //
 //  UpdateDialog.cpp
 //  interface/src/ui
@@ -58,3 +59,4 @@ void UpdateDialog::triggerUpgrade() {
     auto applicationUpdater = DependencyManager::get<AutoUpdater>();
     applicationUpdater.data()->performAutoUpdate(applicationUpdater.data()->getBuildData().lastKey());
 }
+*/

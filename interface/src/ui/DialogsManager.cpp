@@ -30,7 +30,9 @@
 #include "OctreeStatsDialog.h"
 #include "PreferencesDialog.h"
 #include "ScriptEditorWindow.h"
+/* UTII: WE DONT NEED THIS CODE
 #include "UpdateDialog.h"
+*/
 
 template<typename T>
 void DialogsManager::maybeCreateDialog(QPointer<T>& member) {
@@ -64,9 +66,11 @@ void DialogsManager::showLoginDialog() {
     LoginDialog::show();
 }
 
+/* UTII: WE DONT NEED THIS CODE
 void DialogsManager::showUpdateDialog() {
     UpdateDialog::show();
 }
+*/
 
 void DialogsManager::octreeStatsDetails() {
     if (!_octreeStatsDialog) {

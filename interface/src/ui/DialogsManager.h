@@ -60,7 +60,9 @@ public slots:
     void showDomainConnectionDialog();
     
     // Application Update
+    /* UTII: WE DONT NEED THIS CODE
     void showUpdateDialog();
+    */
 
 signals:
     void addressBarToggled();

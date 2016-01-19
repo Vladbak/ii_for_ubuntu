@@ -157,7 +157,9 @@
 #include "ui/Snapshot.h"
 #include "ui/StandAloneJSConsole.h"
 #include "ui/Stats.h"
+/* UTII: WE DONT NEED THIS CODE
 #include "ui/UpdateDialog.h"
+*/
 #include "Util.h"
 #include "InterfaceParentFinder.h"
 
@@ -899,9 +901,11 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     setActiveEyeTracker();
 #endif
 
+    /* UTII: WE DONT NEED THIS CODE
     auto applicationUpdater = DependencyManager::get<AutoUpdater>();
     connect(applicationUpdater.data(), &AutoUpdater::newVersionIsAvailable, dialogsManager.data(), &DialogsManager::showUpdateDialog);
     applicationUpdater->checkForUpdate();
+    */
 
     // Now that menu is initalized we can sync myAvatar with it's state.
     getMyAvatar()->updateMotionBehaviorFromMenu();
@@ -1178,7 +1182,9 @@ void Application::initializeUi() {
     LoginDialog::registerType();
     VrMenu::registerType();
     Tooltip::registerType();
+    /* UTII: WE DONT NEED THIS CODE
     UpdateDialog::registerType();
+    */
 
     auto offscreenUi = DependencyManager::get<OffscreenUi>();
     offscreenUi->create(_offscreenContext->getContext());

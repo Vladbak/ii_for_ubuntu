@@ -1,3 +1,4 @@
+/* UTII: WE DONT NEED THIS CODE
 //
 //  UpdateDialog.h
 //  interface/src/ui
@@ -41,3 +42,4 @@ protected:
 };
 
 #endif // hifi_UpdateDialog_h
+*/
