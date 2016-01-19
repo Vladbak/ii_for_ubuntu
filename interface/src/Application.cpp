@@ -153,6 +153,7 @@
 #include "ui/DataWebDialog.h"
 #include "ui/DialogsManager.h"
 #include "ui/LoginDialog.h"
+#include "ui/LoadingScreen.h"
 #include "ui/overlays/Cube3DOverlay.h"
 #include "ui/Snapshot.h"
 #include "ui/StandAloneJSConsole.h"
@@ -201,7 +202,7 @@ static const float MIRROR_FIELD_OF_VIEW = 30.0f;
 
 static const quint64 TOO_LONG_SINCE_LAST_SEND_DOWNSTREAM_AUDIO_STATS = 1 * USECS_PER_SECOND;
 
-static const QString INFO_HELP_PATH = "html/interface-welcome.html";
+static const QString INFO_HELP_PATH = "html/utii-welcome.html";
 static const QString INFO_EDIT_ENTITIES_PATH = "html/edit-commands.html";
 
 static const unsigned int THROTTLED_SIM_FRAMERATE = 15;
@@ -216,7 +217,7 @@ static const QString DESKTOP_LOCATION = QStandardPaths::writableLocation(QStanda
 static const QString DESKTOP_LOCATION = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation).append("/script.js");
 #endif
 
-const QString DEFAULT_SCRIPTS_JS_URL = "http://s3.amazonaws.com/hifi-public/scripts/defaultScripts.js";
+const QString DEFAULT_SCRIPTS_JS_URL = "http://hifi-assets.e-spaces.com/scripts/defaultScripts.js";
 Setting::Handle<int> maxOctreePacketsPerSecond("maxOctreePPS", DEFAULT_MAX_OCTREE_PPS);
 
 const QHash<QString, Application::AcceptURLMethod> Application::_acceptedExtensions {
@@ -437,7 +438,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     qInstallMessageHandler(messageHandler);
 
     QFontDatabase::addApplicationFont(PathUtils::resourcesPath() + "styles/Inconsolata.otf");
-    _window->setWindowTitle("Interface");
+    _window->setWindowTitle("Infinity Island");
 
     Model::setAbstractViewStateInterface(this); // The model class will sometimes need to know view state details from us
 
@@ -563,12 +564,13 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     // connect to appropriate slots on AccountManager
     AccountManager& accountManager = AccountManager::getInstance();
 
-    const qint64 BALANCE_UPDATE_INTERVAL_MSECS = 5 * 1000;
+    //UTII: we dont need to keep track of the account balance
+    //const qint64 BALANCE_UPDATE_INTERVAL_MSECS = 5 * 1000;
 
-    connect(&balanceUpdateTimer, &QTimer::timeout, &accountManager, &AccountManager::updateBalance);
-    balanceUpdateTimer.start(BALANCE_UPDATE_INTERVAL_MSECS);
+    //connect(&balanceUpdateTimer, &QTimer::timeout, &accountManager, &AccountManager::updateBalance);
+    //balanceUpdateTimer.start(BALANCE_UPDATE_INTERVAL_MSECS);
 
-    connect(&accountManager, &AccountManager::balanceChanged, this, &Application::updateWindowTitle);
+    //connect(&accountManager, &AccountManager::balanceChanged, this, &Application::updateWindowTitle);
 
     auto dialogsManager = DependencyManager::get<DialogsManager>();
     connect(&accountManager, &AccountManager::authRequired, dialogsManager.data(), &DialogsManager::showLoginDialog);
@@ -980,6 +982,8 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
 
     connect(this, &Application::applicationStateChanged, this, &Application::activeChanged);
     qCDebug(interfaceapp, "Startup time: %4.2f seconds.", (double)startupTimer.elapsed() / 1000.0);
+
+    LoadingScreen::show();
 }
 
 void Application::aboutToQuit() {
@@ -1185,6 +1189,7 @@ void Application::initializeUi() {
     /* UTII: WE DONT NEED THIS CODE
     UpdateDialog::registerType();
     */
+    LoadingScreen::registerType();
 
     auto offscreenUi = DependencyManager::get<OffscreenUi>();
     offscreenUi->create(_offscreenContext->getContext());

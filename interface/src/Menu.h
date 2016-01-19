@@ -25,6 +25,16 @@
 
 class Settings;
 
+enum ItemAccessRoles
+{
+    RankAndFile = 1 << 0,
+    Trainers = 1 << 1,
+    THERankAndFile = 1 << 2,
+    THETrainers = 1 << 3,
+    Admin = 1 << 4,
+    All = RankAndFile | Trainers | THERankAndFile | THETrainers | Admin
+};
+
 class MenuWrapper : public QObject {
 public:
     QList<QAction*> actions();
@@ -76,7 +86,8 @@ public:
                                            const char* member = NULL,
                                            QAction::MenuRole role = QAction::NoRole,
                                            int menuItemLocation = UNSPECIFIED_POSITION,
-                                           const QString& grouping = QString());
+                                           const QString& grouping = QString(),
+                                           ItemAccessRoles accessRoles = ItemAccessRoles::All);
 
     QAction* addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
                                            QAction* action,
@@ -84,7 +95,8 @@ public:
                                            const QKeySequence& shortcut = 0,
                                            QAction::MenuRole role = QAction::NoRole,
                                            int menuItemLocation = UNSPECIFIED_POSITION,
-                                           const QString& grouping = QString());
+                                           const QString& grouping = QString(),
+                                           ItemAccessRoles accessRoles = ItemAccessRoles::All);
 
     QAction* addCheckableActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
                                                     const QString& actionName,
@@ -93,12 +105,14 @@ public:
                                                     const QObject* receiver = NULL,
                                                     const char* member = NULL,
                                                     int menuItemLocation = UNSPECIFIED_POSITION,
-                                                    const QString& grouping = QString());
+                                                    const QString& grouping = QString(),
+                                                    ItemAccessRoles accessRoles = ItemAccessRoles::All);
 
     void removeAction(MenuWrapper* menu, const QString& actionName);
 
 public slots:
-    MenuWrapper* addMenu(const QString& menuName, const QString& grouping = QString());
+    MenuWrapper* addMenu(const QString& menuName, const QString& grouping = QString(),
+        ItemAccessRoles accessRoles = ItemAccessRoles::All);
     void removeMenu(const QString& menuName);
     bool menuExists(const QString& menuName);
     void addSeparator(const QString& menuName, const QString& separatorName, const QString& grouping = QString());
@@ -113,6 +127,7 @@ public slots:
 
     bool getGroupingIsVisible(const QString& grouping);
     void setGroupingIsVisible(const QString& grouping, bool isVisible); /// NOTE: the "" grouping is always visible
+    bool getItemRoleIsVisible(ItemAccessRoles roles);
 
     void toggleDeveloperMenus();
     void toggleAdvancedMenus();
@@ -128,7 +143,8 @@ private:
     void addDisabledActionAndSeparator(MenuWrapper* destinationMenu, 
                                        const QString& actionName,
                                        int menuItemLocation = UNSPECIFIED_POSITION, 
-                                       const QString& grouping = QString());
+                                       const QString& grouping = QString(),
+                                       ItemAccessRoles accessRoles = ItemAccessRoles::All);
 
     QAction* getActionFromName(const QString& menuName, MenuWrapper* menu);
     MenuWrapper* getMenuParent(const QString& menuName, QString& finalMenuPart);
@@ -142,6 +158,9 @@ private:
     bool isValidGrouping(const QString& grouping) const { return grouping == "Advanced" || grouping == "Developer"; }
     QHash<QString, bool> _groupingVisible;
     QHash<QString, QSet<QAction*>> _groupingActions;
+    QHash<ItemAccessRoles, QSet<QAction*>> _accessRoleActions;
+
+    ItemAccessRoles _currentRole;
 };
 
 namespace MenuOption {

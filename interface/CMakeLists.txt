@@ -1,5 +1,6 @@
 set(TARGET_NAME interface)
 project(${TARGET_NAME})
+set(APP_NAME "Infinity Island")
 
 # set a default root dir for each of our optional externals if it was not passed
 #set(OPTIONAL_EXTERNALS "LeapMotion")
@@ -67,8 +68,8 @@ if (APPLE)
   # configure CMake to use a custom Info.plist
   SET_TARGET_PROPERTIES( ${this_target} PROPERTIES MACOSX_BUNDLE_INFO_PLIST MacOSXBundleInfo.plist.in )
 
-  set(MACOSX_BUNDLE_BUNDLE_NAME InfinityIsland)
-  set(MACOSX_BUNDLE_GUI_IDENTIFIER com.e-spaces.InfinityIsland)
+  set(MACOSX_BUNDLE_BUNDLE_NAME "Infinity Island")
+  set(MACOSX_BUNDLE_GUI_IDENTIFIER com.unither.InfinityIsland)
   
   set(ICON_FILENAME "UTII.icns")
   
@@ -101,12 +102,12 @@ endif()
 set_target_properties(
     ${TARGET_NAME}
     PROPERTIES 
-      OUTPUT_NAME "InfinityIsland"
+      OUTPUT_NAME ${APP_NAME}
 )
 
 # These are external plugins, but we need to do the 'add dependency' here so that their 
 # binary directories get added to the fixup path
-add_dependency_external_projects(sixense)
+#add_dependency_external_projects(sixense)
 add_dependency_external_projects(sdl2)
 #if (WIN32)
 #    add_dependency_external_projects(OpenVR)
@@ -229,3 +230,4 @@ endif()
 
 package_libraries_for_deployment()
 consolidate_stack_components()
+unset(APP_NAME)

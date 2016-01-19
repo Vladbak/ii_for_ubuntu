@@ -12,7 +12,7 @@ macro(SETUP_HIFI_PLUGIN)
     set_target_properties(${TARGET_NAME} PROPERTIES FOLDER "Plugins")
 
     if (APPLE)
-        set(PLUGIN_PATH "interface.app/Contents/MacOS/plugins")
+        set(PLUGIN_PATH "Infinity Island.app/Contents/MacOS/plugins")
     else()
         set(PLUGIN_PATH "plugins")
     endif()
