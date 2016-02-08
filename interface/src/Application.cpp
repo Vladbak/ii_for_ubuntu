@@ -1181,7 +1181,7 @@ void Application::initializeGL() {
     // update before the first render
     update(1.0f / _fps);
 
-    InfoView::show(INFO_HELP_PATH, true);
+    //InfoView::show(INFO_HELP_PATH, true);
 }
 extern void setupPreferences();
 void Application::initializeUi() {
