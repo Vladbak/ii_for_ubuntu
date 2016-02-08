@@ -151,7 +151,9 @@
 #if defined(Q_OS_MAC) || defined(Q_OS_WIN)
 #include "SpeechRecognizer.h"
 #endif
+/* UTII
 #include "Stars.h"
+*/
 #include "ui/AddressBarDialog.h"
 #include "ui/AvatarInputs.h"
 #include "ui/AssetUploadDialogFactory.h"
@@ -1883,11 +1885,11 @@ void Application::keyPressEvent(QKeyEvent* event) {
                 _physicsEngine->dumpNextStats();
                 break;
             }
-
+/* UTII
             case Qt::Key_Asterisk:
                 Menu::getInstance()->triggerOption(MenuOption::Stars);
                 break;
-
+*/
             case Qt::Key_S:
                 if (isShifted && isMeta && !isOption) {
                     Menu::getInstance()->triggerOption(MenuOption::SuppressShortTimings);
@@ -3618,9 +3620,9 @@ class BackgroundRenderData {
 public:
     typedef render::Payload<BackgroundRenderData> Payload;
     typedef Payload::DataPointer Pointer;
-
+	/* UTII
     Stars _stars;
-
+	*/
     static render::ItemID _item; // unique WorldBoxRenderData
 };
 
@@ -3653,6 +3655,7 @@ namespace render {
                 }
                 // If no skybox texture is available, render the SKY_DOME while it loads
             }
+			/* UTII: we don't need this
                 // fall through to next case
             case model::SunSkyStage::SKY_DOME:  {
                 if (Menu::getInstance()->isOptionChecked(MenuOption::Stars)) {
@@ -3666,6 +3669,7 @@ namespace render {
                 }
             }
                 break;
+			*/
             case model::SunSkyStage::NO_BACKGROUND:
             default:
                 // this line intentionally left blank

@@ -350,8 +350,9 @@ Menu::Menu() {
     // Developer > Render >>>
     MenuWrapper* renderOptionsMenu = developerMenu->addMenu("Render");
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::WorldAxes);
+    /* UTII
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::Stars, 0, true);
-
+    */
     // Developer > Render > Ambient Light
     MenuWrapper* ambientLightMenu = renderOptionsMenu->addMenu(MenuOption::RenderAmbientLight);
     QActionGroup* ambientLightGroup = new QActionGroup(ambientLightMenu);

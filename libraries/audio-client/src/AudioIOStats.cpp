@@ -92,7 +92,9 @@ void AudioIOStats::processStreamStatsPacket(QSharedPointer<ReceivedMessage> mess
 }
 
 void AudioIOStats::sendDownstreamAudioStatsPacket() {
-
+    if (!SEND_AUDIO_STATS) {
+        return;
+    }
     auto audioIO = DependencyManager::get<AudioClient>();
 
     // since this function is called every second, we'll sample for some of our stats here

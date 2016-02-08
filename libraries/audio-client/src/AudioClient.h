@@ -58,6 +58,8 @@
 #pragma warning( pop )
 #endif
 
+static const bool SEND_AUDIO_STATS = true;
+
 static const int NUM_AUDIO_CHANNELS = 2;
 
 static const int DEFAULT_AUDIO_OUTPUT_BUFFER_SIZE_FRAMES = 3;
