@@ -3,7 +3,7 @@
 #  cmake/macros
 #
 #  Created by Leonardo Murillo on 12/16/2015.
-#  Copyright 2015 High Fidelity, Inc.
+#  Modified for UTII by Thijs Wenker 12/29/2015#  Copyright 2015 High Fidelity, Inc.
 #
 #  Distributed under the Apache License, Version 2.0.
 #  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
@@ -17,9 +17,9 @@ macro(GENERATE_INSTALLERS)
   set(_DISPLAY_NAME ${BUILD_ORGANIZATION})
 
   set(CPACK_PACKAGE_NAME ${_DISPLAY_NAME})
-  set(CPACK_PACKAGE_VENDOR "High Fidelity")
+  set(CPACK_PACKAGE_VENDOR "UT")
   set(CPACK_PACKAGE_VERSION ${BUILD_VERSION})
-  set(CPACK_PACKAGE_FILE_NAME "HighFidelity-Alpha-${BUILD_VERSION}")
+  set(CPACK_PACKAGE_FILE_NAME "InfinityIsland-${BUILD_VERSION}")
   set(CPACK_NSIS_DISPLAY_NAME ${_DISPLAY_NAME})
   set(CPACK_NSIS_PACKAGE_NAME ${_DISPLAY_NAME})
   set(CPACK_PACKAGE_INSTALL_DIRECTORY ${_DISPLAY_NAME})
@@ -85,8 +85,8 @@ macro(GENERATE_INSTALLERS)
 
   set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 
-  cpack_add_component(${CLIENT_COMPONENT} DISPLAY_NAME "High Fidelity Client")
-  cpack_add_component(${SERVER_COMPONENT} DISPLAY_NAME "High Fidelity Server")
+  cpack_add_component(${CLIENT_COMPONENT} DISPLAY_NAME "Infinity Island Client")
+  #cpack_add_component(${SERVER_COMPONENT} DISPLAY_NAME "High Fidelity Server")
 
   include(CPack)
 endmacro()
