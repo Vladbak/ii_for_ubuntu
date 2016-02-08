@@ -38,9 +38,6 @@ namespace render {
 static const float SCALING_RATIO = .05f;
 static const float SMOOTHING_RATIO = .05f; // 0 < ratio < 1
 
-static const float BILLBOARD_FIELD_OF_VIEW = 30.0f; // degrees
-static const float BILLBOARD_DISTANCE = 5.56f;       // meters
-
 extern const float CHAT_MESSAGE_SCALE;
 extern const float CHAT_MESSAGE_HEIGHT;
 
@@ -119,7 +116,6 @@ public:
     virtual void setFaceModelURL(const QUrl& faceModelURL) override;
     virtual void setSkeletonModelURL(const QUrl& skeletonModelURL) override;
     virtual void setAttachmentData(const QVector<AttachmentData>& attachmentData) override;
-    virtual void setBillboard(const QByteArray& billboard) override;
 
     void setShowDisplayName(bool showDisplayName);
 
@@ -167,13 +163,26 @@ public:
     using SpatiallyNestable::setOrientation;
     virtual void setOrientation(const glm::quat& orientation) override;
 
+    // these call through to the SpatiallyNestable versions, but they are here to expose these to javascript.
+    Q_INVOKABLE virtual const QUuid getParentID() const override { return SpatiallyNestable::getParentID(); }
+    Q_INVOKABLE virtual void setParentID(const QUuid& parentID) override;
+    Q_INVOKABLE virtual quint16 getParentJointIndex() const override { return SpatiallyNestable::getParentJointIndex(); }
+    Q_INVOKABLE virtual void setParentJointIndex(quint16 parentJointIndex) override;
+
+    // NOT thread safe, must be called on main thread.
+    glm::vec3 getUncachedLeftPalmPosition() const;
+    glm::quat getUncachedLeftPalmRotation() const;
+    glm::vec3 getUncachedRightPalmPosition() const;
+    glm::quat getUncachedRightPalmRotation() const;
+
 public slots:
 
     // FIXME - these should be migrated to use Pose data instead
-    glm::vec3 getLeftPalmPosition();
-    glm::quat getLeftPalmRotation();
-    glm::vec3 getRightPalmPosition();
-    glm::quat getRightPalmRotation();
+    // thread safe, will return last valid palm from cache
+    glm::vec3 getLeftPalmPosition() const;
+    glm::quat getLeftPalmRotation() const;
+    glm::vec3 getRightPalmPosition() const;
+    glm::quat getRightPalmRotation() const;
 
 protected:
     friend class AvatarManager;
@@ -241,14 +250,11 @@ protected:
 
 private:
     bool _initialized;
-    NetworkTexturePointer _billboardTexture;
-    bool _shouldRenderBillboard;
+    bool _shouldAnimate { true };
     bool _shouldSkipRender { false };
     bool _isLookAtTarget;
 
-    void renderBillboard(RenderArgs* renderArgs);
-
-    float getBillboardSize() const;
+    float getBoundingRadius() const;
 
     static int _jointConesID;
 

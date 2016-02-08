@@ -104,7 +104,7 @@ public:
     quint64 getLastBroadcast() const { return _lastBroadcast; }
     void setLastBroadcast(quint64 lastBroadcast) { _lastBroadcast = lastBroadcast; }
 
-    void markAsChangedOnServer() {  _changedOnServer = usecTimestampNow();  }
+    void markAsChangedOnServer() { _changedOnServer = usecTimestampNow();  }
     quint64 getLastChangedOnServer() const { return _changedOnServer; }
 
     // TODO: eventually only include properties changed since the params.lastViewFrustumSent time
@@ -172,7 +172,7 @@ public:
 
     // Hyperlink related getters and setters
     QString getHref() const { return _href; }
-    void setHref(QString value) { _href = value; }
+    void setHref(QString value);
 
     QString getDescription() const { return _description; }
     void setDescription(QString value) { _description = value; }
@@ -271,12 +271,13 @@ public:
     bool isVisible() const { return _visible; }
     bool isInvisible() const { return !_visible; }
 
-    bool getIgnoreForCollisions() const { return _ignoreForCollisions; }
-    void setIgnoreForCollisions(bool value) { _ignoreForCollisions = value; }
+    bool getCollisionless() const { return _collisionless; }
+    void setCollisionless(bool value) { _collisionless = value; }
 
     uint8_t getCollisionMask() const { return _collisionMask; }
-    uint8_t getFinalCollisionMask() const { return _ignoreForCollisions ? 0 : _collisionMask; }
     void setCollisionMask(uint8_t value) { _collisionMask = value; }
+
+    void computeCollisionGroupAndFinalMask(int16_t& group, int16_t& mask) const;
 
     bool getDynamic() const { return _dynamic; }
     void setDynamic(bool value) { _dynamic = value; }
@@ -331,7 +332,7 @@ public:
     void updateGravity(const glm::vec3& value);
     void updateAngularVelocity(const glm::vec3& value);
     void updateAngularDamping(float value);
-    void updateIgnoreForCollisions(bool value);
+    void updateCollisionless(bool value);
     void updateCollisionMask(uint8_t value);
     void updateDynamic(bool value);
     void updateLifetime(float value);
@@ -350,14 +351,14 @@ public:
     void setPhysicsInfo(void* data) { _physicsInfo = data; }
     EntityTreeElementPointer getElement() const { return _element; }
     EntityTreePointer getTree() const;
-    bool wantTerseEditLogging();
+    bool wantTerseEditLogging() const;
 
     glm::mat4 getEntityToWorldMatrix() const;
     glm::mat4 getWorldToEntityMatrix() const;
     glm::vec3 worldToEntity(const glm::vec3& point) const;
     glm::vec3 entityToWorld(const glm::vec3& point) const;
 
-    quint64 getLastEditedFromRemote() { return _lastEditedFromRemote; }
+    quint64 getLastEditedFromRemote() const { return _lastEditedFromRemote; }
 
     void getAllTerseUpdateProperties(EntityItemProperties& properties) const;
 
@@ -370,8 +371,8 @@ public:
     bool clearActions(EntitySimulation* simulation);
     void setActionData(QByteArray actionData);
     const QByteArray getActionData() const;
-    bool hasActions() { return !_objectActions.empty(); }
-    QList<QUuid> getActionIDs() { return _objectActions.keys(); }
+    bool hasActions() const { return !_objectActions.empty(); }
+    QList<QUuid> getActionIDs() const { return _objectActions.keys(); }
     QVariantMap getActionArguments(const QUuid& actionID) const;
     void deserializeActions();
 
@@ -396,6 +397,7 @@ public:
     virtual bool setAbsoluteJointTranslationInObjectFrame(int index, const glm::vec3& translation) override { return false; }
 
     virtual int getJointIndex(const QString& name) const { return -1; }
+    virtual QStringList getJointNames() const { return QStringList(); }
 
     virtual void loader() {} // called indirectly when urls for geometry are updated
 
@@ -447,7 +449,7 @@ protected:
     glm::vec3 _angularVelocity;
     float _angularDamping;
     bool _visible;
-    bool _ignoreForCollisions;
+    bool _collisionless;
     uint8_t _collisionMask { ENTITY_COLLISION_MASK_DEFAULT };
     bool _dynamic;
     bool _locked;

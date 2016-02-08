@@ -162,7 +162,7 @@
                 position: this.getWandTipPosition(properties),
                 dimensions: BUBBLE_INITIAL_DIMENSIONS,
                 dynamic: false,
-                ignoreForCollisions: true,
+                collisionless: true,
                 damping: BUBBLE_LINEAR_DAMPING,
                 shapeType: "sphere"
             });
@@ -173,6 +173,9 @@
             if (this.currentBubble === null) {
                 this.createBubbleAtTipOfWand();
             }
+        },
+        startEquip: function(id, params) {
+            this.startNearGrab(id, params);
         },
         continueNearGrab: function() {
             var deltaTime = checkInterval();
@@ -188,10 +191,16 @@
             this.growBubbleWithWandVelocity(properties, deltaTime);
 
         },
+        continueEquip: function() {
+            this.continueNearGrab();
+        },
         releaseGrab: function() {
             //delete the  current buble and reset state when the wand is released
             Entities.deleteEntity(this.currentBubble);
             this.currentBubble = null;
+        },
+        releaseEquip: function() {
+            this.releaseGrab();
         },
 
     };

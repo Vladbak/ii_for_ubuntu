@@ -120,7 +120,7 @@ void Rig::overrideRoleAnimation(const QString& role, const QString& url, float f
             _origRoleAnimations[role] = node;
             const float REFERENCE_FRAMES_PER_SECOND = 30.0f;
             float timeScale = fps / REFERENCE_FRAMES_PER_SECOND;
-            auto clipNode = std::make_shared<AnimClip>(role, url, firstFrame, lastFrame, timeScale, loop);
+            auto clipNode = std::make_shared<AnimClip>(role, url, firstFrame, lastFrame, timeScale, loop, false);
             AnimNode::Pointer parent = node->getParent();
             parent->replaceChild(node, clipNode);
         } else {
@@ -152,7 +152,7 @@ void Rig::prefetchAnimation(const QString& url) {
 
     // This will begin loading the NetworkGeometry for the given URL.
     // which should speed us up if we request it later via overrideAnimation.
-    auto clipNode = std::make_shared<AnimClip>("prefetch", url, 0, 0, 1.0, false);
+    auto clipNode = std::make_shared<AnimClip>("prefetch", url, 0, 0, 1.0, false, false);
     _prefetchedAnimations.push_back(clipNode);
 }
 
@@ -464,6 +464,10 @@ void Rig::computeEyesInRootFrame(const AnimPoseVec& poses) {
     }
 }
 
+void Rig::setEnableInverseKinematics(bool enable) {
+    _enableInverseKinematics = enable;
+}
+
 AnimPose Rig::getAbsoluteDefaultPose(int index) const {
     if (_animSkeleton && index >= 0 && index < _animSkeleton->getNumJoints()) {
         return _absoluteDefaultPoses[index];
@@ -500,7 +504,7 @@ static const std::vector<float> FORWARD_SPEEDS = { 0.4f, 1.4f, 4.5f }; // m/s
 static const std::vector<float> BACKWARD_SPEEDS = { 0.6f, 1.45f }; // m/s
 static const std::vector<float> LATERAL_SPEEDS = { 0.2f, 0.65f }; // m/s
 
-void Rig::computeMotionAnimationState(float deltaTime, const glm::vec3& worldPosition, const glm::vec3& worldVelocity, const glm::quat& worldRotation) {
+void Rig::computeMotionAnimationState(float deltaTime, const glm::vec3& worldPosition, const glm::vec3& worldVelocity, const glm::quat& worldRotation, CharacterControllerState ccState) {
 
     glm::vec3 front = worldRotation * IDENTITY_FRONT;
 
@@ -568,40 +572,66 @@ void Rig::computeMotionAnimationState(float deltaTime, const glm::vec3& worldPos
         const float TURN_ENTER_SPEED_THRESHOLD = 0.5f; // rad/sec
         const float TURN_EXIT_SPEED_THRESHOLD = 0.2f; // rad/sec
 
-        float moveThresh;
-        if (_state != RigRole::Move) {
-            moveThresh = MOVE_ENTER_SPEED_THRESHOLD;
-        } else {
-            moveThresh = MOVE_EXIT_SPEED_THRESHOLD;
-        }
-
-        float turnThresh;
-        if (_state != RigRole::Turn) {
-            turnThresh = TURN_ENTER_SPEED_THRESHOLD;
-        } else {
-            turnThresh = TURN_EXIT_SPEED_THRESHOLD;
-        }
-
-        if (glm::length(localVel) > moveThresh) {
-            if (_desiredState != RigRole::Move) {
+        if (ccState == CharacterControllerState::Hover) {
+            if (_desiredState != RigRole::Hover) {
                 _desiredStateAge = 0.0f;
             }
-            _desiredState = RigRole::Move;
+            _desiredState = RigRole::Hover;
+        } else if (ccState == CharacterControllerState::InAir) {
+            if (_desiredState != RigRole::InAir) {
+                _desiredStateAge = 0.0f;
+            }
+            _desiredState = RigRole::InAir;
+        } else if (ccState == CharacterControllerState::Takeoff) {
+            if (_desiredState != RigRole::Takeoff) {
+                _desiredStateAge = 0.0f;
+            }
+            _desiredState = RigRole::Takeoff;
         } else {
-            if (fabsf(turningSpeed) > turnThresh) {
-                if (_desiredState != RigRole::Turn) {
+            float moveThresh;
+            if (_state != RigRole::Move) {
+                moveThresh = MOVE_ENTER_SPEED_THRESHOLD;
+            } else {
+                moveThresh = MOVE_EXIT_SPEED_THRESHOLD;
+            }
+
+            float turnThresh;
+            if (_state != RigRole::Turn) {
+                turnThresh = TURN_ENTER_SPEED_THRESHOLD;
+            } else {
+                turnThresh = TURN_EXIT_SPEED_THRESHOLD;
+            }
+
+            if (glm::length(localVel) > moveThresh) {
+                if (_desiredState != RigRole::Move) {
                     _desiredStateAge = 0.0f;
                 }
-                _desiredState = RigRole::Turn;
-            } else { // idle
-                if (_desiredState != RigRole::Idle) {
-                    _desiredStateAge = 0.0f;
+                _desiredState = RigRole::Move;
+            } else {
+                if (fabsf(turningSpeed) > turnThresh) {
+                    if (_desiredState != RigRole::Turn) {
+                        _desiredStateAge = 0.0f;
+                    }
+                    _desiredState = RigRole::Turn;
+                } else { // idle
+                    if (_desiredState != RigRole::Idle) {
+                        _desiredStateAge = 0.0f;
+                    }
+                    _desiredState = RigRole::Idle;
                 }
-                _desiredState = RigRole::Idle;
             }
         }
 
         const float STATE_CHANGE_HYSTERESIS_TIMER = 0.1f;
+
+        // Skip hystersis timer for jump transitions.
+        if (_desiredState == RigRole::Takeoff) {
+            _desiredStateAge = STATE_CHANGE_HYSTERESIS_TIMER;
+        } else if (_state == RigRole::Takeoff && _desiredState == RigRole::InAir) {
+            _desiredStateAge = STATE_CHANGE_HYSTERESIS_TIMER;
+        } else if (_state == RigRole::InAir && _desiredState != RigRole::InAir) {
+            _desiredStateAge = STATE_CHANGE_HYSTERESIS_TIMER;
+        }
 
         if ((_desiredStateAge >= STATE_CHANGE_HYSTERESIS_TIMER) && _desiredState != _state) {
             _state = _desiredState;
@@ -649,6 +679,14 @@ void Rig::computeMotionAnimationState(float deltaTime, const glm::vec3& worldPos
                 _animVars.set("isTurningLeft", false);
                 _animVars.set("isTurningRight", false);
                 _animVars.set("isNotTurning", true);
+                _animVars.set("isFlying", false);
+                _animVars.set("isNotFlying", true);
+                _animVars.set("isTakeoffStand", false);
+                _animVars.set("isTakeoffRun", false);
+                _animVars.set("isNotTakeoff", true);
+                _animVars.set("isInAirStand", false);
+                _animVars.set("isInAirRun", false);
+                _animVars.set("isNotInAir", true);
             }
         } else if (_state == RigRole::Turn) {
             if (turningSpeed > 0.0f) {
@@ -667,7 +705,16 @@ void Rig::computeMotionAnimationState(float deltaTime, const glm::vec3& worldPos
             _animVars.set("isMovingRight", false);
             _animVars.set("isMovingLeft", false);
             _animVars.set("isNotMoving", true);
-        } else {
+            _animVars.set("isFlying", false);
+            _animVars.set("isNotFlying", true);
+            _animVars.set("isTakeoffStand", false);
+            _animVars.set("isTakeoffRun", false);
+            _animVars.set("isNotTakeoff", true);
+            _animVars.set("isInAirStand", false);
+            _animVars.set("isInAirRun", false);
+            _animVars.set("isNotInAir", true);
+
+        } else if (_state == RigRole::Idle ) {
             // default anim vars to notMoving and notTurning
             _animVars.set("isMovingForward", false);
             _animVars.set("isMovingBackward", false);
@@ -677,9 +724,103 @@ void Rig::computeMotionAnimationState(float deltaTime, const glm::vec3& worldPos
             _animVars.set("isTurningLeft", false);
             _animVars.set("isTurningRight", false);
             _animVars.set("isNotTurning", true);
+            _animVars.set("isFlying", false);
+            _animVars.set("isNotFlying", true);
+            _animVars.set("isTakeoffStand", false);
+            _animVars.set("isTakeoffRun", false);
+            _animVars.set("isNotTakeoff", true);
+            _animVars.set("isInAirStand", false);
+            _animVars.set("isInAirRun", false);
+            _animVars.set("isNotInAir", true);
+
+        } else if (_state == RigRole::Hover) {
+            // flying.
+            _animVars.set("isMovingForward", false);
+            _animVars.set("isMovingBackward", false);
+            _animVars.set("isMovingLeft", false);
+            _animVars.set("isMovingRight", false);
+            _animVars.set("isNotMoving", true);
+            _animVars.set("isTurningLeft", false);
+            _animVars.set("isTurningRight", false);
+            _animVars.set("isNotTurning", true);
+            _animVars.set("isFlying", true);
+            _animVars.set("isNotFlying", false);
+            _animVars.set("isTakeoffStand", false);
+            _animVars.set("isTakeoffRun", false);
+            _animVars.set("isNotTakeoff", true);
+            _animVars.set("isInAirStand", false);
+            _animVars.set("isInAirRun", false);
+            _animVars.set("isNotInAir", true);
+
+        } else if (_state == RigRole::Takeoff) {
+            // jumping in-air
+            _animVars.set("isMovingForward", false);
+            _animVars.set("isMovingBackward", false);
+            _animVars.set("isMovingLeft", false);
+            _animVars.set("isMovingRight", false);
+            _animVars.set("isNotMoving", true);
+            _animVars.set("isTurningLeft", false);
+            _animVars.set("isTurningRight", false);
+            _animVars.set("isNotTurning", true);
+            _animVars.set("isFlying", false);
+            _animVars.set("isNotFlying", true);
+
+            bool takeOffRun = forwardSpeed > 0.1f;
+            if (takeOffRun) {
+                _animVars.set("isTakeoffStand", false);
+                _animVars.set("isTakeoffRun", true);
+            } else {
+                _animVars.set("isTakeoffStand", true);
+                _animVars.set("isTakeoffRun", false);
+            }
+
+            _animVars.set("isNotTakeoff", false);
+            _animVars.set("isInAirStand", false);
+            _animVars.set("isInAirRun", false);
+            _animVars.set("isNotInAir", false);
+
+        } else if (_state == RigRole::InAir) {
+            // jumping in-air
+            _animVars.set("isMovingForward", false);
+            _animVars.set("isMovingBackward", false);
+            _animVars.set("isMovingLeft", false);
+            _animVars.set("isMovingRight", false);
+            _animVars.set("isNotMoving", true);
+            _animVars.set("isTurningLeft", false);
+            _animVars.set("isTurningRight", false);
+            _animVars.set("isNotTurning", true);
+            _animVars.set("isFlying", false);
+            _animVars.set("isNotFlying", true);
+            _animVars.set("isTakeoffStand", false);
+            _animVars.set("isTakeoffRun", false);
+            _animVars.set("isNotTakeoff", true);
+
+            bool inAirRun = forwardSpeed > 0.1f;
+            if (inAirRun) {
+                _animVars.set("isInAirStand", false);
+                _animVars.set("isInAirRun", true);
+            } else {
+                _animVars.set("isInAirStand", true);
+                _animVars.set("isInAirRun", false);
+            }
+            _animVars.set("isNotInAir", false);
+
+            // compute blend based on velocity
+            const float JUMP_SPEED = 3.5f;
+            float alpha = glm::clamp(-worldVelocity.y / JUMP_SPEED, -1.0f, 1.0f) + 1.0f;
+            _animVars.set("inAirAlpha", alpha);
         }
 
         t += deltaTime;
+
+        if (_enableInverseKinematics != _lastEnableInverseKinematics) {
+            if (_enableInverseKinematics) {
+                _animVars.set("ikOverlayAlpha", 1.0f);
+            } else {
+                _animVars.set("ikOverlayAlpha", 0.0f);
+            }
+        }
+        _lastEnableInverseKinematics = _enableInverseKinematics;
     }
 
     _lastFront = front;

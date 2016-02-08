@@ -20,14 +20,15 @@
 
 using namespace render;
 
-void render::cullItems(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ItemIDsBounds& inItems, ItemIDsBounds& outItems) {
-    assert(renderContext->getArgs());
-    assert(renderContext->getArgs()->_viewFrustum);
+void render::cullItems(const RenderContextPointer& renderContext, const CullFunctor& cullFunctor, RenderDetails::Item& details,
+                       const ItemIDsBounds& inItems, ItemIDsBounds& outItems) {
+    assert(renderContext->args);
+    assert(renderContext->args->_viewFrustum);
 
-    RenderArgs* args = renderContext->getArgs();
-    auto renderDetails = renderContext->getArgs()->_details._item;
+    RenderArgs* args = renderContext->args;
+    ViewFrustum* frustum = args->_viewFrustum;
 
-    renderDetails->_considered += inItems.size();
+    details._considered += inItems.size();
     
     // Culling / LOD
     for (auto item : inItems) {
@@ -41,24 +42,24 @@ void render::cullItems(const SceneContextPointer& sceneContext, const RenderCont
         bool outOfView;
         {
             PerformanceTimer perfTimer("boxInFrustum");
-            outOfView = args->_viewFrustum->boxInFrustum(item.bounds) == ViewFrustum::OUTSIDE;
+            outOfView = frustum->boxInFrustum(item.bounds) == ViewFrustum::OUTSIDE;
         }
         if (!outOfView) {
             bool bigEnoughToRender;
             {
                 PerformanceTimer perfTimer("shouldRender");
-                bigEnoughToRender = (args->_shouldRender) ? args->_shouldRender(args, item.bounds) : true;
+                bigEnoughToRender = cullFunctor(args, item.bounds);
             }
             if (bigEnoughToRender) {
                 outItems.emplace_back(item); // One more Item to render
             } else {
-                renderDetails->_tooSmall++;
+                details._tooSmall++;
             }
         } else {
-            renderDetails->_outOfView++;
+            details._outOfView++;
         }
     }
-    renderDetails->_rendered += outItems.size();
+    details._rendered += outItems.size();
 }
 
 struct ItemBound {
@@ -85,11 +86,11 @@ struct BackToFrontSort {
 };
 
 void render::depthSortItems(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, bool frontToBack, const ItemIDsBounds& inItems, ItemIDsBounds& outItems) {
-    assert(renderContext->getArgs());
-    assert(renderContext->getArgs()->_viewFrustum);
+    assert(renderContext->args);
+    assert(renderContext->args->_viewFrustum);
     
     auto& scene = sceneContext->_scene;
-    RenderArgs* args = renderContext->getArgs();
+    RenderArgs* args = renderContext->args;
     
 
     // Allocate and simply copy
@@ -126,7 +127,7 @@ void render::depthSortItems(const SceneContextPointer& sceneContext, const Rende
 
 void render::renderItems(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ItemIDsBounds& inItems) {
     auto& scene = sceneContext->_scene;
-    RenderArgs* args = renderContext->getArgs();
+    RenderArgs* args = renderContext->args;
 
     for (const auto& itemDetails : inItems) {
         auto& item = scene->getItem(itemDetails.id);
@@ -152,9 +153,12 @@ void renderShape(RenderArgs* args, const ShapePlumberPointer& shapeContext, cons
 void render::renderShapes(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext,
                           const ShapePlumberPointer& shapeContext, const ItemIDsBounds& inItems, int maxDrawnItems) {
     auto& scene = sceneContext->_scene;
-    RenderArgs* args = renderContext->getArgs();
+    RenderArgs* args = renderContext->args;
     
-    auto numItemsToDraw = glm::max((int)inItems.size(), maxDrawnItems);
+    int numItemsToDraw = (int)inItems.size();
+    if (maxDrawnItems != -1) {
+        numItemsToDraw = glm::min(numItemsToDraw, maxDrawnItems);
+    }
     for (auto i = 0; i < numItemsToDraw; ++i) {
         auto& item = scene->getItem(inItems[i].id);
         renderShape(args, shapeContext, item);
@@ -176,9 +180,7 @@ void FetchItems::run(const SceneContextPointer& sceneContext, const RenderContex
         }
     }
 
-    if (_probeNumItems) {
-        _probeNumItems(renderContext, (int)outItems.size());
-    }
+    std::static_pointer_cast<Config>(renderContext->jobConfig)->numItems = (int)outItems.size();
 }
 
 void DepthSortItems::run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ItemIDsBounds& inItems, ItemIDsBounds& outItems) {
@@ -186,8 +188,8 @@ void DepthSortItems::run(const SceneContextPointer& sceneContext, const RenderCo
 }
 
 void DrawLight::run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext) {
-    assert(renderContext->getArgs());
-    assert(renderContext->getArgs()->_viewFrustum);
+    assert(renderContext->args);
+    assert(renderContext->args->_viewFrustum);
 
     // render lights
     auto& scene = sceneContext->_scene;
@@ -200,12 +202,12 @@ void DrawLight::run(const SceneContextPointer& sceneContext, const RenderContext
         inItems.emplace_back(ItemIDAndBounds(id, item.getBound()));
     }
 
-    RenderArgs* args = renderContext->getArgs();
+    RenderArgs* args = renderContext->args;
 
+    auto& details = args->_details.edit(RenderDetails::OTHER_ITEM);
     ItemIDsBounds culledItems;
     culledItems.reserve(inItems.size());
-    args->_details.pointTo(RenderDetails::OTHER_ITEM);
-    cullItems(sceneContext, renderContext, inItems, culledItems);
+    cullItems(renderContext, _cullFunctor, details, inItems, culledItems);
 
     gpu::doInBatch(args->_context, [&](gpu::Batch& batch) {
         args->_batch = &batch;
@@ -235,6 +237,9 @@ void PipelineSortShapes::run(const SceneContextPointer& sceneContext, const Rend
 }
 
 void DepthSortShapes::run(const SceneContextPointer& sceneContext, const RenderContextPointer& renderContext, const ShapesIDsBounds& inShapes, ShapesIDsBounds& outShapes) {
+    outShapes.clear();
+    outShapes.reserve(inShapes.size());
+
     for (auto& pipeline : inShapes) {
         auto& inItems = pipeline.second;
         auto outItems = outShapes.find(pipeline.first);

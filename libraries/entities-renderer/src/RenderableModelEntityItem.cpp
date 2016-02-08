@@ -440,8 +440,8 @@ void RenderableModelEntityItem::render(RenderArgs* args) {
         bool success;
         auto shapeTransform = getTransformToCenter(success);
         if (success) {
-            batch.setModelTransform(Transform()); // we want to include the scale as well
-            DependencyManager::get<GeometryCache>()->renderWireCubeInstance(batch, shapeTransform, greenColor);
+            batch.setModelTransform(shapeTransform); // we want to include the scale as well
+            DependencyManager::get<GeometryCache>()->renderWireCubeInstance(batch, greenColor);
         }
     }
 }
@@ -480,12 +480,17 @@ Model* RenderableModelEntityItem::getModel(EntityTreeRenderer* renderer) {
         } else { // we already have the model we want...
             result = _model;
         }
-    } else { // if our desired URL is empty, we may need to delete our existing model
-        if (_model) {
-            _myRenderer->releaseModel(_model);
-            result = _model = NULL;
-            _needsInitialSimulation = true;
-        }
+    } else if (_model) {
+        // remove from scene
+        render::ScenePointer scene = AbstractViewStateInterface::instance()->getMain3DScene();
+        render::PendingChanges pendingChanges;
+        _model->removeFromScene(scene, pendingChanges);
+        scene->enqueuePendingChanges(pendingChanges);
+
+        // release interest
+        _myRenderer->releaseModel(_model);
+        result = _model = NULL;
+        _needsInitialSimulation = true;
     }
 
     return result;
@@ -772,8 +777,14 @@ int RenderableModelEntityItem::getJointIndex(const QString& name) const {
     return -1;
 }
 
-
-// TODO -- expose a way to list joint names
-// RenderableModelEntityItem::QStringList getJointNames() const {
-// rig->nameOfJoint(i);
-// }
+QStringList RenderableModelEntityItem::getJointNames() const {
+    QStringList result;
+    if (_model && _model->isActive()) {
+        RigPointer rig = _model->getRig();
+        int jointCount = rig->getJointStateCount();
+        for (int jointIndex = 0; jointIndex < jointCount; jointIndex++) {
+            result << rig->nameOfJoint(jointIndex);
+        }
+    }
+    return result;
+}

@@ -23,7 +23,6 @@ Script.include([
 
     "libraries/ToolTip.js",
 
-    "libraries/entityPropertyDialogBox.js",
     "libraries/entityCameraTool.js",
     "libraries/gridTool.js",
     "libraries/entityList.js",
@@ -32,17 +31,16 @@ Script.include([
 
 var selectionDisplay = SelectionDisplay;
 var selectionManager = SelectionManager;
-var entityPropertyDialogBox = EntityPropertyDialogBox;
 
 var lightOverlayManager = new LightOverlayManager();
 
 var cameraManager = new CameraManager();
 
 var grid = Grid();
-gridTool = GridTool({
-    horizontalGrid: grid
-});
-gridTool.setVisible(false);
+// gridTool = GridTool({
+//     horizontalGrid: grid
+// });
+// gridTool.setVisible(false);
 
 var entityListTool = EntityListTool();
 
@@ -336,7 +334,7 @@ var toolBar = (function() {
                 isActive = active;
                 if (!isActive) {
                     entityListTool.setVisible(false);
-                    gridTool.setVisible(false);
+                    // gridTool.setVisible(false);
                     grid.setEnabled(false);
                     propertiesTool.setVisible(false);
                     selectionManager.clearSelections();
@@ -344,7 +342,7 @@ var toolBar = (function() {
                 } else {
                     hasShownPropertiesTool = false;
                     entityListTool.setVisible(true);
-                    gridTool.setVisible(true);
+                    // gridTool.setVisible(true);
                     grid.setEnabled(true);
                     propertiesTool.setVisible(true);
                     Window.setFocus();
@@ -1277,9 +1275,12 @@ function handeMenuEvent(menuItem) {
         }
     } else if (menuItem == "Import Entities" || menuItem == "Import Entities from URL") {
 
-        var importURL;
+        var importURL = null;
         if (menuItem == "Import Entities") {
-            importURL = "file:///" + Window.browse("Select models to import", "", "*.json");
+            var fullPath = Window.browse("Select models to import", "", "*.json");
+            if (fullPath) {
+                importURL = "file:///" + fullPath;
+            }
         } else {
             importURL = Window.prompt("URL of SVO to import", "");
         }
@@ -1556,6 +1557,11 @@ PropertiesTool = function(opts) {
                     Entities.editEntity(selectionManager.selections[i], properties);
                 }
             } else {
+                if (data.properties.dynamic === false) {
+                    // this object is leaving dynamic, so we zero its velocities
+                    data.properties["velocity"] = {x: 0, y: 0, z: 0};
+                    data.properties["angularVelocity"] = {x: 0, y: 0, z: 0};
+                }
                 if (data.properties.rotation !== undefined) {
                     var rotation = data.properties.rotation;
                     data.properties.rotation = Quat.fromPitchYawRollDegrees(rotation.x, rotation.y, rotation.z);
@@ -1658,29 +1664,6 @@ PropertiesTool = function(opts) {
                             scriptTimestamp: timestamp,
                         });
                     }
-                }
-            } else if (data.action == "centerAtmosphereToZone") {
-                if (selectionManager.hasSelection()) {
-                    selectionManager.saveProperties();
-                    for (var i = 0; i < selectionManager.selections.length; i++) {
-                        var properties = selectionManager.savedProperties[selectionManager.selections[i]];
-                        if (properties.type == "Zone") {
-                            var centerOfZone = properties.boundingBox.center;
-                            var atmosphereCenter = {
-                                x: centerOfZone.x,
-                                y: centerOfZone.y - properties.atmosphere.innerRadius,
-                                z: centerOfZone.z
-                            };
-
-                            Entities.editEntity(selectionManager.selections[i], {
-                                atmosphere: {
-                                    center: atmosphereCenter
-                                },
-                            });
-                        }
-                    }
-                    pushCommandForSelections();
-                    selectionManager._update();
                 }
             }
         }

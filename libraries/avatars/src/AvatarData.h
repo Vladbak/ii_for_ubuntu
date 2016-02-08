@@ -177,7 +177,7 @@ public:
 
     virtual bool isMyAvatar() const { return false; }
 
-    const QUuid& getSessionUUID() const { return getID(); }
+    const QUuid getSessionUUID() const { return getID(); }
 
     glm::vec3 getHandPosition() const;
     void setHandPosition(const glm::vec3& handPosition);
@@ -276,6 +276,9 @@ public:
     Q_INVOKABLE virtual QStringList getJointNames() const { return _jointNames; }
 
     Q_INVOKABLE void setBlendshape(QString name, float val) { _headData->setBlendshape(name, val); }
+
+    Q_INVOKABLE QVariantList getAttachmentsVariant() const;
+    Q_INVOKABLE void setAttachmentsVariant(const QVariantList& variant);
 
     void setForceFaceTrackerConnected(bool connected) { _forceFaceTrackerConnected = connected; }
 
@@ -448,6 +451,9 @@ public:
 
     QJsonObject toJson() const;
     void fromJson(const QJsonObject& json);
+
+    QVariant toVariant() const;
+    void fromVariant(const QVariant& variant);
 };
 
 QDataStream& operator<<(QDataStream& out, const AttachmentData& attachment);

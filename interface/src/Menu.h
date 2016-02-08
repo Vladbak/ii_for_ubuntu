@@ -171,9 +171,7 @@ namespace MenuOption {
     const QString AnimDebugDrawAnimPose = "Debug Draw Animation";
     const QString AnimDebugDrawDefaultPose = "Debug Draw Default Pose";
     const QString AnimDebugDrawPosition= "Debug Draw Position";
-    const QString Antialiasing = "Antialiasing";
     const QString AssetMigration = "ATP Asset Migration";
-    const QString Atmosphere = "Atmosphere";
     const QString Attachments = "Attachments...";
     const QString AudioNetworkStats = "Audio Network Stats";
     const QString AudioNoiseReduction = "Audio Noise Reduction";
@@ -206,7 +204,6 @@ namespace MenuOption {
     const QString CopyPath = "Copy Path to Clipboard";
     const QString CoupleEyelids = "Couple Eyelids";
     const QString CrashInterface = "Crash Interface";
-    const QString DebugAmbientOcclusion = "Debug Ambient Occlusion";
     const QString DecreaseAvatarSize = "Decrease Avatar Size";
     const QString DeleteBookmark = "Delete Bookmark...";
     const QString DisableActivityLogger = "Disable Activity Logger";
@@ -227,6 +224,7 @@ namespace MenuOption {
     const QString EchoServerAudio = "Echo Server Audio";
     const QString Enable3DTVMode = "Enable 3DTV Mode";
     const QString EnableCharacterController = "Enable avatar collisions";
+    const QString EnableInverseKinematics = "Enable Inverse Kinematics";
     const QString ExpandMyAvatarSimulateTiming = "Expand /myAvatar/simulation";
     const QString ExpandMyAvatarTiming = "Expand /myAvatar";
     const QString ExpandOtherAvatarTiming = "Expand /otherAvatar";
@@ -266,8 +264,8 @@ namespace MenuOption {
     const QString OutputMenu = "Display";
     const QString PackageModel = "Package Model...";
     const QString Pair = "Pair";
-    const QString PhysicsShowOwned = "Highlight Simulation Ownership";
     const QString PhysicsShowHulls = "Draw Collision Hulls";
+    const QString PhysicsShowOwned = "Highlight Simulation Ownership";
     const QString PipelineWarnings = "Log Render Pipeline Warnings";
     const QString Preferences = "General...";
     const QString Quit =  "Quit";
@@ -321,6 +319,7 @@ namespace MenuOption {
     const QString UploadAsset = "Upload File to Asset Server";
     const QString UseAudioForMouth = "Use Audio for Mouth";
     const QString UseCamera = "Use Camera";
+    const QString UseAnimPreAndPostRotations = "Use Anim Pre and Post Rotations";
     const QString VelocityFilter = "Velocity Filter";
     const QString VisibleToEveryone = "Everyone";
     const QString VisibleToFriends = "Friends";

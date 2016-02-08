@@ -14,6 +14,7 @@ Window {
     resizable: true
     destroyOnInvisible: true
     x: 40; y: 40
+    implicitWidth: 384; implicitHeight: 640
 
     property var scripts: ScriptDiscoveryService;
     property var scriptsModel: scripts.scriptsModelFilter
@@ -71,26 +72,9 @@ Window {
         scripts.stopAllScripts();
     }
 
-    Component {
-        id: fileDialogBuilder
-        FileDialog { }
-    }
-
-    function loadFromFile() {
-        var fileDialog = fileDialogBuilder.createObject(Desktop, { filterModel: fileFilters });
-        fileDialog.canceled.connect(function(){
-            console.debug("Cancelled file open")
-        })
-
-        fileDialog.selectedFile.connect(function(file){
-            console.debug("Selected " + file)
-            scripts.loadOneScript(file);
-        })
-    }
-
     Rectangle {
         color: "white"
-        implicitWidth: 384; implicitHeight: 640
+        anchors.fill: parent
 
         Item {
             anchors { fill: parent; margins: 8 }
@@ -111,8 +95,7 @@ Window {
                 Button { text: "Stop all"; onClicked: stopAll() }
             }
 
-            ListView {
-                clip: true
+            ScrollView {
                 anchors {
                     top: allButtons.bottom;
                     left: parent.left;
@@ -122,44 +105,64 @@ Window {
                     bottomMargin: 8
                 }
 
-                model: runningScriptsModel
+                ListView {
+                    id: listView
+                    clip: true
+                    anchors { fill: parent; margins: 0 }
 
-                delegate: Rectangle {
-                    radius: 3
-                    anchors { left: parent.left; right: parent.right }
+                    model: runningScriptsModel
 
-                    height: scriptName.height + 12
-                    color: index % 2 ? "#ddd" : "#eee"
+                    delegate: Rectangle {
+                        id: rectangle
+                        clip: true
+                        radius: 3
+                        anchors { left: parent.left; right: parent.right }
 
-                    Text {
-                        anchors { left: parent.left; leftMargin: 4; verticalCenter: parent.verticalCenter }
-                        id: scriptName
-                        text: name
-                    }
+                        height: scriptName.height + 12 + (ListView.isCurrentItem ? scriptName.height + 6 : 0)
+                        color: ListView.isCurrentItem ? "#39f" :
+                                   index % 2 ? "#ddd" : "#eee"
 
-                    Row {
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.right: parent.right
-                        anchors.rightMargin: 4
-                        spacing: 4
-                        HifiControls.FontAwesome {
-                            text: "\uf021"; size: scriptName.height;
-                            MouseArea {
-                                anchors { fill: parent; margins: -2; }
-                                onClicked: reloadScript(model.url)
-                            }
+                        Text {
+                            id: scriptName
+                            anchors { left: parent.left; leftMargin: 4; top: parent.top; topMargin:6 }
+                            text: name
                         }
-                        HifiControls.FontAwesome {
-                            size: scriptName.height; text: "\uf00d"
-                            MouseArea {
-                                anchors { fill: parent; margins: -2; }
-                                onClicked: stopScript(model.url)
+
+                        Text {
+                            id: scriptUrl
+                            anchors { left: scriptName.left; right: parent.right; rightMargin: 4; top: scriptName.bottom; topMargin: 6 }
+                            text: url
+                            elide: Text.ElideMiddle
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: listView.currentIndex = index
+                        }
+
+                        Row {
+                            anchors.verticalCenter: scriptName.verticalCenter
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4
+                            spacing: 4
+                            HifiControls.FontAwesome {
+                                text: "\uf021"; size: scriptName.height;
+                                MouseArea {
+                                    anchors { fill: parent; margins: -2; }
+                                    onClicked: reloadScript(model.url)
+                                }
+                            }
+                            HifiControls.FontAwesome {
+                                size: scriptName.height; text: "\uf00d"
+                                MouseArea {
+                                    anchors { fill: parent; margins: -2; }
+                                    onClicked: stopScript(model.url)
+                                }
                             }
                         }
                     }
                 }
             }
-
 
             Text {
                 id: loadLabel
@@ -180,17 +183,43 @@ Window {
                 anchors.bottom: filterEdit.top
                 anchors.bottomMargin: 8
                 anchors.right: parent.right
+
+
                 Button {
                     text: "from URL";
-                    onClicked: ApplicationInterface.loadScriptURLDialog();
+                    onClicked: fromUrlTimer.running = true;
+
+                    // For some reason trigginer an API that enters
+                    // an internal event loop directly from the button clicked
+                    // trigger below causes the appliction to behave oddly.
+                    // Most likely because the button onClicked handling is never
+                    // completed until the function returns.
+                    // FIXME find a better way of handling the input dialogs that
+                    // doesn't trigger this.
+                    Timer {
+                        id: fromUrlTimer
+                        interval: 5
+                        repeat: false
+                        running: false
+                        onTriggered: ApplicationInterface.loadScriptURLDialog();
+                    }
                 }
+
                 Button {
                     text: "from Disk"
-                    onClicked: loadFromFile();
+                    onClicked: fromDiskTimer.running = true;
+
+                    Timer {
+                        id: fromDiskTimer
+                        interval: 5
+                        repeat: false
+                        running: false
+                        onTriggered: ApplicationInterface.loadDialog();
+                    }
                 }
             }
 
-            TextField {
+            HifiControls.TextField {
                 id: filterEdit
                 anchors.left: parent.left
                 anchors.right: parent.right
@@ -198,6 +227,7 @@ Window {
                 anchors.bottomMargin: 8
                 placeholderText: "filter"
                 onTextChanged: scriptsModel.filterRegExp =  new RegExp("^.*" + text + ".*$", "i")
+                Component.onCompleted: scriptsModel.filterRegExp = new RegExp("^.*$", "i")
             }
 
             TreeView {
@@ -222,7 +252,7 @@ Window {
                 TableViewColumn { title: "Name"; role: "display"; }
             }
 
-            TextField {
+            HifiControls.TextField {
                 id: selectedScript
                 readOnly: true
                 anchors.left: parent.left

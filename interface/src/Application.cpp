@@ -36,6 +36,9 @@
 #include <QtGui/QMouseEvent>
 #include <QtGui/QDesktopServices>
 
+#include <QtNetwork/QLocalSocket>
+#include <QtNetwork/QLocalServer>
+
 #include <QtQml/QQmlContext>
 #include <QtQml/QQmlEngine>
 #include <QtQuick/QQuickWindow>
@@ -57,7 +60,7 @@
 #include <ResourceScriptingInterface.h>
 #include <AccountManager.h>
 #include <AddressManager.h>
-#include <ApplicationVersion.h>
+#include <BuildInfo.h>
 #include <AssetClient.h>
 #include <AssetUpload.h>
 #include <AutoUpdater.h>
@@ -92,12 +95,13 @@
 #include <PathUtils.h>
 #include <PerfStat.h>
 #include <PhysicsEngine.h>
+#include <PhysicsHelpers.h>
 #include <plugins/PluginContainer.h>
 #include <plugins/PluginManager.h>
 #include <RenderableWebEntityItem.h>
+#include <RenderShadowTask.h>
 #include <RenderDeferredTask.h>
 #include <ResourceCache.h>
-#include <RenderScriptingInterface.h>
 #include <SceneScriptingInterface.h>
 #include <RecordingScriptingInterface.h>
 #include <ScriptCache.h>
@@ -112,6 +116,7 @@
 #include <recording/Deck.h>
 #include <recording/Recorder.h>
 #include <QmlWebWindowClass.h>
+#include <Preferences.h>
 
 #include "AnimDebugDraw.h"
 #include "AudioClient.h"
@@ -150,7 +155,6 @@
 #include "ui/AddressBarDialog.h"
 #include "ui/AvatarInputs.h"
 #include "ui/AssetUploadDialogFactory.h"
-#include "ui/DataWebDialog.h"
 #include "ui/DialogsManager.h"
 #include "ui/LoginDialog.h"
 #include "ui/LoadingScreen.h"
@@ -179,7 +183,6 @@ using namespace std;
 static QTimer locationUpdateTimer;
 static QTimer balanceUpdateTimer;
 static QTimer identityPacketTimer;
-static QTimer billboardPacketTimer;
 static QTimer pingTimer;
 
 static const QString SNAPSHOT_EXTENSION  = ".jpg";
@@ -305,7 +308,7 @@ bool setupEssentials(int& argc, char** argv) {
         listenPort = atoi(portStr);
     }
     // Set build version
-    QCoreApplication::setApplicationVersion(BUILD_VERSION);
+    QCoreApplication::setApplicationVersion(BuildInfo::VERSION);
 
     Setting::preInit();
 
@@ -322,6 +325,7 @@ bool setupEssentials(int& argc, char** argv) {
 
     // Set dependencies
     DependencyManager::set<ScriptEngines>();
+    DependencyManager::set<Preferences>();
     DependencyManager::set<recording::Deck>();
     DependencyManager::set<recording::Recorder>();
     DependencyManager::set<AddressManager>();
@@ -347,7 +351,7 @@ bool setupEssentials(int& argc, char** argv) {
     DependencyManager::set<BandwidthRecorder>();
     DependencyManager::set<ResourceCacheSharedItems>();
     DependencyManager::set<DesktopScriptingInterface>();
-    DependencyManager::set<EntityScriptingInterface>();
+    DependencyManager::set<EntityScriptingInterface>(true);
     DependencyManager::set<RecordingScriptingInterface>();
     DependencyManager::set<WindowScriptingInterface>();
     DependencyManager::set<HMDScriptingInterface>();
@@ -359,7 +363,6 @@ bool setupEssentials(int& argc, char** argv) {
 #endif
     DependencyManager::set<DiscoverabilityManager>();
     DependencyManager::set<SceneScriptingInterface>();
-    DependencyManager::set<RenderScriptingInterface>();
     DependencyManager::set<OffscreenUi>();
     DependencyManager::set<AutoUpdater>();
     DependencyManager::set<PathUtils>();
@@ -404,6 +407,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     _entityClipboard(new EntityTree()),
     _lastQueriedTime(usecTimestampNow()),
     _mirrorViewRect(QRect(MIRROR_VIEW_LEFT_PADDING, MIRROR_VIEW_TOP_PADDING, MIRROR_VIEW_WIDTH, MIRROR_VIEW_HEIGHT)),
+    _previousScriptLocation("LastScriptLocation", DESKTOP_LOCATION),
     _fieldOfView("fieldOfView", DEFAULT_FIELD_OF_VIEW_DEGREES),
     _scaleMirror(1.0f),
     _rotateMirror(0.0f),
@@ -422,9 +426,6 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
 
     auto controllerScriptingInterface = DependencyManager::get<controller::ScriptingInterface>().data();
     _controllerScriptingInterface = dynamic_cast<ControllerScriptingInterface*>(controllerScriptingInterface);
-    // to work around the Qt constant wireless scanning, set the env for polling interval very high
-    const QByteArray EXTREME_BEARER_POLL_TIMEOUT = QString::number(INT_MAX).toLocal8Bit();
-    qputenv("QT_BEARER_POLL_TIMEOUT", EXTREME_BEARER_POLL_TIMEOUT);
 
     _entityClipboard->createRootElement();
 
@@ -540,14 +541,14 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     connect(&domainHandler, SIGNAL(disconnectedFromDomain()), SLOT(updateWindowTitle()));
     connect(&domainHandler, SIGNAL(disconnectedFromDomain()), SLOT(clearDomainOctreeDetails()));
     connect(&domainHandler, &DomainHandler::settingsReceived, this, &Application::domainSettingsReceived);
-    connect(&domainHandler, &DomainHandler::hostnameChanged,
-        DependencyManager::get<AddressManager>().data(), &AddressManager::storeCurrentAddress);
 
     // update our location every 5 seconds in the metaverse server, assuming that we are authenticated with one
     const qint64 DATA_SERVER_LOCATION_CHANGE_UPDATE_MSECS = 5 * 1000;
 
     auto discoverabilityManager = DependencyManager::get<DiscoverabilityManager>();
     connect(&locationUpdateTimer, &QTimer::timeout, discoverabilityManager.data(), &DiscoverabilityManager::updateLocation);
+    connect(&locationUpdateTimer, &QTimer::timeout, 
+        DependencyManager::get<AddressManager>().data(), &AddressManager::storeCurrentAddress);
     locationUpdateTimer.start(DATA_SERVER_LOCATION_CHANGE_UPDATE_MSECS);
 
     // if we get a domain change, immediately attempt update location in metaverse server
@@ -591,6 +592,10 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
 
     connect(addressManager.data(), &AddressManager::hostChanged, this, &Application::updateWindowTitle);
     connect(this, &QCoreApplication::aboutToQuit, addressManager.data(), &AddressManager::storeCurrentAddress);
+    
+    // Save avatar location immediately after a teleport.
+    connect(getMyAvatar(), &MyAvatar::positionGoneTo,
+        DependencyManager::get<AddressManager>().data(), &AddressManager::storeCurrentAddress);
 
     auto scriptEngines = DependencyManager::get<ScriptEngines>().data();
     scriptEngines->registerScriptInitializer([this](ScriptEngine* engine){
@@ -628,10 +633,6 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     // send the identity packet for our avatar each second to our avatar mixer
     connect(&identityPacketTimer, &QTimer::timeout, getMyAvatar(), &MyAvatar::sendIdentityPacket);
     identityPacketTimer.start(AVATAR_IDENTITY_PACKET_SEND_INTERVAL_MSECS);
-
-    // send the billboard packet for our avatar every few seconds
-    connect(&billboardPacketTimer, &QTimer::timeout, getMyAvatar(), &MyAvatar::sendBillboardPacket);
-    billboardPacketTimer.start(AVATAR_BILLBOARD_PACKET_SEND_INTERVAL_MSECS);
 
     QString cachePath = QStandardPaths::writableLocation(QStandardPaths::DataLocation);
     QNetworkAccessManager& networkAccessManager = NetworkAccessManager::getInstance();
@@ -674,10 +675,6 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     _offscreenContext->create(_glWidget->context()->contextHandle());
     _offscreenContext->makeCurrent();
     initializeGL();
-
-    // Start rendering
-    _renderEngine->addTask(make_shared<RenderDeferredTask>());
-    _renderEngine->registerScene(_main3DScene);
 
     _offscreenContext->makeCurrent();
 
@@ -797,7 +794,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
             } else if (action == controller::toInt(controller::Action::CYCLE_CAMERA)) {
                 cycleCamera();
             } else if (action == controller::toInt(controller::Action::CONTEXT_MENU)) {
-                VrMenu::toggle(); // show context menu even on non-stereo displays
+                offscreenUi->toggleMenu(_glWidget->mapFromGlobal(QCursor::pos()));
             } else if (action == controller::toInt(controller::Action::RETICLE_X)) {
                 auto oldPos = QCursor::pos();
                 auto newPos = oldPos;
@@ -1037,7 +1034,6 @@ void Application::cleanupBeforeQuit() {
     locationUpdateTimer.stop();
     balanceUpdateTimer.stop();
     identityPacketTimer.stop();
-    billboardPacketTimer.stop();
     pingTimer.stop();
     QMetaObject::invokeMethod(&_settingsTimer, "stop", Qt::BlockingQueuedConnection);
 
@@ -1153,9 +1149,17 @@ void Application::initializeGL() {
     initDisplay();
     qCDebug(interfaceapp, "Initialized Display.");
 
+    // Set up the render engine
+    render::CullFunctor cullFunctor = LODManager::shouldRender;
+    _renderEngine->addJob<RenderShadowTask>("RenderShadowTask", cullFunctor);
+    _renderEngine->addJob<RenderDeferredTask>("RenderDeferredTask", cullFunctor);
+    _renderEngine->registerScene(_main3DScene);
+    // TODO: Load a cached config file
+
     // The UI can't be created until the primary OpenGL
     // context is created, because it needs to share
     // texture resources
+    // Needs to happen AFTER the render engine initialization to access its configuration
     initializeUi();
     qCDebug(interfaceapp, "Initialized Offscreen UI.");
     _offscreenContext->makeCurrent();
@@ -1179,17 +1183,18 @@ void Application::initializeGL() {
 
     InfoView::show(INFO_HELP_PATH, true);
 }
-
+extern void setupPreferences();
 void Application::initializeUi() {
     AddressBarDialog::registerType();
     ErrorDialog::registerType();
     LoginDialog::registerType();
-    VrMenu::registerType();
     Tooltip::registerType();
     /* UTII: WE DONT NEED THIS CODE
     UpdateDialog::registerType();
     */
     LoadingScreen::registerType();
+    qmlRegisterType<Preference>("Hifi", 1, 0, "Preference");
+
 
     auto offscreenUi = DependencyManager::get<OffscreenUi>();
     offscreenUi->create(_offscreenContext->getContext());
@@ -1197,7 +1202,7 @@ void Application::initializeUi() {
     offscreenUi->setBaseUrl(QUrl::fromLocalFile(PathUtils::resourcesPath() + "/qml/"));
     // OffscreenUi is a subclass of OffscreenQmlSurface specifically designed to
     // support the window management and scripting proxies for VR use
-    offscreenUi->createDesktop();
+    offscreenUi->createDesktop(QString("hifi/Desktop.qml"));
     
     // FIXME either expose so that dialogs can set this themselves or
     // do better detection in the offscreen UI of what has focus
@@ -1209,8 +1214,11 @@ void Application::initializeUi() {
         qApp->quit();
     });
 
+    setupPreferences();
+
     // For some reason there is already an "Application" object in the QML context, 
     // though I can't find it. Hence, "ApplicationInterface"
+    rootContext->setContextProperty("SnapshotUploader", new SnapshotUploader());
     rootContext->setContextProperty("ApplicationInterface", this); 
     rootContext->setContextProperty("AnimationCache", DependencyManager::get<AnimationCache>().data());
     rootContext->setContextProperty("Audio", &AudioScriptingInterface::getInstance());
@@ -1219,6 +1227,7 @@ void Application::initializeUi() {
     rootContext->setContextProperty("MyAvatar", getMyAvatar());
     rootContext->setContextProperty("Messages", DependencyManager::get<MessagesClient>().data());
     rootContext->setContextProperty("Recording", DependencyManager::get<RecordingScriptingInterface>().data());
+    rootContext->setContextProperty("Preferences", DependencyManager::get<Preferences>().data());
 
     rootContext->setContextProperty("TREE_SCALE", TREE_SCALE);
     rootContext->setContextProperty("Quat", new Quat());
@@ -1252,11 +1261,9 @@ void Application::initializeUi() {
     rootContext->setContextProperty("Paths", DependencyManager::get<PathUtils>().data());
     rootContext->setContextProperty("HMD", DependencyManager::get<HMDScriptingInterface>().data());
     rootContext->setContextProperty("Scene", DependencyManager::get<SceneScriptingInterface>().data());
-    rootContext->setContextProperty("Render", DependencyManager::get<RenderScriptingInterface>().data());
+    rootContext->setContextProperty("Render", _renderEngine->getConfiguration().get());
 
     _glWidget->installEventFilter(offscreenUi.data());
-    VrMenu::load();
-    VrMenu::executeQueuedLambdas();
     offscreenUi->setMouseTranslator([=](const QPointF& pt) {
         QPointF result = pt;
         auto displayPlugin = getActiveDisplayPlugin();
@@ -1366,6 +1373,9 @@ void Application::paintGL() {
         renderArgs._renderMode = RenderArgs::MIRROR_RENDER_MODE;
         renderArgs._blitFramebuffer = DependencyManager::get<FramebufferCache>()->getSelfieFramebuffer();
 
+        auto inputs = AvatarInputs::getInstance();
+        _mirrorViewRect.moveTo(inputs->x(), inputs->y());
+
         renderRearViewMirror(&renderArgs, _mirrorViewRect);
 
         renderArgs._blitFramebuffer.reset();
@@ -1384,10 +1394,12 @@ void Application::paintGL() {
 
     }
 
+    glm::vec3 boomOffset;
     {
         PerformanceTimer perfTimer("CameraUpdates");
 
         auto myAvatar = getMyAvatar();
+        boomOffset = myAvatar->getScale() * myAvatar->getBoomLength() * -IDENTITY_FRONT;
 
         myAvatar->startCapture();
         if (_myCamera.getMode() == CAMERA_MODE_FIRST_PERSON || _myCamera.getMode() == CAMERA_MODE_THIRD_PERSON) {
@@ -1415,18 +1427,16 @@ void Application::paintGL() {
             if (isHMDMode()) {
                 auto hmdWorldMat = myAvatar->getSensorToWorldMatrix() * myAvatar->getHMDSensorMatrix();
                 _myCamera.setRotation(glm::normalize(glm::quat_cast(hmdWorldMat)));
-                auto worldBoomOffset = myAvatar->getOrientation() * (myAvatar->getScale() * myAvatar->getBoomLength() * glm::vec3(0.0f, 0.0f, 1.0f));
-                _myCamera.setPosition(extractTranslation(hmdWorldMat) + worldBoomOffset);
+                _myCamera.setPosition(extractTranslation(hmdWorldMat) +
+                    myAvatar->getOrientation() * boomOffset);
             } else {
                 _myCamera.setRotation(myAvatar->getHead()->getOrientation());
                 if (Menu::getInstance()->isOptionChecked(MenuOption::CenterPlayerInView)) {
                     _myCamera.setPosition(myAvatar->getDefaultEyePosition()
-                        + _myCamera.getRotation()
-                        * (myAvatar->getScale() * myAvatar->getBoomLength() * glm::vec3(0.0f, 0.0f, 1.0f)));
+                        + _myCamera.getRotation() * boomOffset);
                 } else {
                     _myCamera.setPosition(myAvatar->getDefaultEyePosition()
-                        + myAvatar->getOrientation()
-                        * (myAvatar->getScale() * myAvatar->getBoomLength() * glm::vec3(0.0f, 0.0f, 1.0f)));
+                        + myAvatar->getOrientation() * boomOffset);
                 }
             }
         } else if (_myCamera.getMode() == CAMERA_MODE_MIRROR) {
@@ -1492,6 +1502,7 @@ void Application::paintGL() {
     {
         PROFILE_RANGE(__FUNCTION__ "/mainRender");
         PerformanceTimer perfTimer("mainRender");
+        renderArgs._boomOffset = boomOffset;
         // Viewport is assigned to the size of the framebuffer
         renderArgs._viewport = ivec4(0, 0, size.width(), size.height());
         if (displayPlugin->isStereo()) {
@@ -1692,9 +1703,8 @@ void Application::resizeGL() {
 }
 
 bool Application::importSVOFromURL(const QString& urlString) {
-    QUrl url(urlString);
-    emit svoImportRequested(url.url());
-    return true; // assume it's accepted
+    emit svoImportRequested(urlString);
+    return true;
 }
 
 bool Application::event(QEvent* event) {
@@ -1843,6 +1853,15 @@ void Application::keyPressEvent(QKeyEvent* event) {
                 }
                 break;
 
+            case Qt::Key_X:
+                if (isShifted && isMeta) {
+                    auto offscreenUi = DependencyManager::get<OffscreenUi>();
+                    offscreenUi->getRootContext()->engine()->clearComponentCache();
+                    //OffscreenUi::information("Debugging", "Component cache cleared");
+                    // placeholder for dialogs being converted to QML.
+                }
+                break;
+
             case Qt::Key_B:
                 if (isMeta) {
                     auto offscreenUi = DependencyManager::get<OffscreenUi>();
@@ -1893,12 +1912,6 @@ void Application::keyPressEvent(QKeyEvent* event) {
                 }
                 break;
             }
-
-            case Qt::Key_A:
-                if (isShifted) {
-                    Menu::getInstance()->triggerOption(MenuOption::Atmosphere);
-                }
-                break;
 
             case Qt::Key_Backslash:
                 Menu::getInstance()->triggerOption(MenuOption::Chat);
@@ -2074,7 +2087,8 @@ void Application::keyPressEvent(QKeyEvent* event) {
 
 void Application::keyReleaseEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Alt && _altPressed && hasFocus()) {
-        VrMenu::toggle(); // show context menu even on non-stereo displays
+        auto offscreenUi = DependencyManager::get<OffscreenUi>();
+        offscreenUi->toggleMenu(_glWidget->mapFromGlobal(QCursor::pos()));
     }
 
     _keysPressed.remove(event->key());
@@ -2377,12 +2391,8 @@ bool Application::acceptSnapshot(const QString& urlString) {
             DependencyManager::get<AddressManager>()->handleLookupString(snapshotData->getURL().toString());
         }
     } else {
-        QMessageBox msgBox;
-        msgBox.setText("No location details were found in the file "
-                        + snapshotPath + ", try dragging in an authentic Hifi snapshot.");
-
-        msgBox.setStandardButtons(QMessageBox::Ok);
-        msgBox.exec();
+        OffscreenUi::warning("", "No location details were found in the file\n" +
+                             snapshotPath + "\nTry dragging in an authentic Hifi snapshot.");
     }
     return true;
 }
@@ -2664,6 +2674,8 @@ void Application::loadSettings() {
 
     Menu::getInstance()->loadSettings();
     getMyAvatar()->loadData();
+
+    _settingsLoaded = true;
 }
 
 void Application::saveSettings() {
@@ -2703,8 +2715,6 @@ void Application::initDisplay() {
 void Application::init() {
     // Make sure Login state is up to date
     DependencyManager::get<DialogsManager>()->toggleLoginDialog();
-
-    _environment.init();
 
     DependencyManager::get<DeferredLightingEffect>()->init();
 
@@ -3108,13 +3118,14 @@ void Application::update(float deltaTime) {
             static VectorOfMotionStates motionStates;
             _entitySimulation.getObjectsToRemoveFromPhysics(motionStates);
             _physicsEngine->removeObjects(motionStates);
+            _entitySimulation.deleteObjectsRemovedFromPhysics();
 
-            getEntities()->getTree()->withWriteLock([&] {
+            getEntities()->getTree()->withReadLock([&] {
                 _entitySimulation.getObjectsToAddToPhysics(motionStates);
                 _physicsEngine->addObjects(motionStates);
 
             });
-            getEntities()->getTree()->withWriteLock([&] {
+            getEntities()->getTree()->withReadLock([&] {
                 _entitySimulation.getObjectsToChange(motionStates);
                 VectorOfMotionStates stillNeedChange = _physicsEngine->changeObjects(motionStates);
                 _entitySimulation.setObjectsToChange(stillNeedChange);
@@ -3144,7 +3155,7 @@ void Application::update(float deltaTime) {
             PerformanceTimer perfTimer("havestChanges");
             if (_physicsEngine->hasOutgoingChanges()) {
                 getEntities()->getTree()->withWriteLock([&] {
-                    _entitySimulation.handleOutgoingChanges(_physicsEngine->getOutgoingChanges(), _physicsEngine->getSessionID());
+                    _entitySimulation.handleOutgoingChanges(_physicsEngine->getOutgoingChanges(), Physics::getSessionUUID());
                     avatarManager->handleOutgoingChanges(_physicsEngine->getOutgoingChanges());
                 });
 
@@ -3286,6 +3297,10 @@ int Application::sendNackPackets() {
 }
 
 void Application::queryOctree(NodeType_t serverType, PacketType packetType, NodeToJurisdictionMap& jurisdictions) {
+
+    if (!_settingsLoaded) {
+        return; // bail early if settings are not loaded
+    }
 
     //qCDebug(interfaceapp) << ">>> inside... queryOctree()... _viewFrustum.getFieldOfView()=" << _viewFrustum.getFieldOfView();
     bool wantExtraDebugging = getLogger()->extraDebugging();
@@ -3531,23 +3546,6 @@ glm::vec3 Application::getAvatarPosition() const {
     return getMyAvatar()->getPosition();
 }
 
-QImage Application::renderAvatarBillboard(RenderArgs* renderArgs) {
-
-    const int BILLBOARD_SIZE = 64;
-
-    // Need to make sure the gl context is current here
-    _offscreenContext->makeCurrent();
-
-    renderArgs->_renderMode = RenderArgs::DEFAULT_RENDER_MODE;
-    renderRearViewMirror(renderArgs, QRect(0, 0, BILLBOARD_SIZE, BILLBOARD_SIZE), true);
-
-    auto primaryFbo = DependencyManager::get<FramebufferCache>()->getPrimaryFramebuffer();
-    QImage image(BILLBOARD_SIZE, BILLBOARD_SIZE, QImage::Format_ARGB32);
-    renderArgs->_context->downloadFramebuffer(primaryFbo, glm::ivec4(0, 0, BILLBOARD_SIZE, BILLBOARD_SIZE), image);
-
-    return image;
-}
-
 ViewFrustum* Application::getViewFrustum() {
 #ifdef DEBUG
     if (QThread::currentThread() == activeRenderingThread) {
@@ -3622,10 +3620,6 @@ public:
     typedef Payload::DataPointer Pointer;
 
     Stars _stars;
-    Environment* _environment;
-
-    BackgroundRenderData(Environment* environment) : _environment(environment) {
-    }
 
     static render::ItemID _item; // unique WorldBoxRenderData
 };
@@ -3667,63 +3661,8 @@ namespace render {
                         "Application::payloadRender<BackgroundRenderData>() ... stars...");
                     // should be the first rendering pass - w/o depth buffer / lighting
 
-                    // compute starfield alpha based on distance from atmosphere
-                    float alpha = 1.0f;
-                    bool hasStars = true;
-
-                    if (Menu::getInstance()->isOptionChecked(MenuOption::Atmosphere)) {
-                        // TODO: handle this correctly for zones
-                        const EnvironmentData& closestData = background->_environment->getClosestData(args->_viewFrustum->getPosition()); // was theCamera instead of  _viewFrustum
-
-                        if (closestData.getHasStars()) {
-                            const float APPROXIMATE_DISTANCE_FROM_HORIZON = 0.1f;
-                            const float DOUBLE_APPROXIMATE_DISTANCE_FROM_HORIZON = 0.2f;
-
-                            glm::vec3 sunDirection = (args->_viewFrustum->getPosition()/*getAvatarPosition()*/ - closestData.getSunLocation())
-                                                            / closestData.getAtmosphereOuterRadius();
-                            float height = glm::distance(args->_viewFrustum->getPosition()/*theCamera.getPosition()*/, closestData.getAtmosphereCenter());
-                            if (height < closestData.getAtmosphereInnerRadius()) {
-                                // If we're inside the atmosphere, then determine if our keyLight is below the horizon
-                                alpha = 0.0f;
-
-                                if (sunDirection.y > -APPROXIMATE_DISTANCE_FROM_HORIZON) {
-                                    float directionY = glm::clamp(sunDirection.y,
-                                                        -APPROXIMATE_DISTANCE_FROM_HORIZON, APPROXIMATE_DISTANCE_FROM_HORIZON)
-                                                        + APPROXIMATE_DISTANCE_FROM_HORIZON;
-                                    alpha = (directionY / DOUBLE_APPROXIMATE_DISTANCE_FROM_HORIZON);
-                                }
-
-
-                            } else if (height < closestData.getAtmosphereOuterRadius()) {
-                                alpha = (height - closestData.getAtmosphereInnerRadius()) /
-                                    (closestData.getAtmosphereOuterRadius() - closestData.getAtmosphereInnerRadius());
-
-                                if (sunDirection.y > -APPROXIMATE_DISTANCE_FROM_HORIZON) {
-                                    float directionY = glm::clamp(sunDirection.y,
-                                                        -APPROXIMATE_DISTANCE_FROM_HORIZON, APPROXIMATE_DISTANCE_FROM_HORIZON)
-                                                        + APPROXIMATE_DISTANCE_FROM_HORIZON;
-                                    alpha = (directionY / DOUBLE_APPROXIMATE_DISTANCE_FROM_HORIZON);
-                                }
-                            }
-                        } else {
-                            hasStars = false;
-                        }
-                    }
-
-                    // finally render the starfield
-                    if (hasStars) {
-                        background->_stars.render(args, alpha);
-                    }
-
-                    // draw the sky dome
-                    if (/*!selfAvatarOnly &&*/ Menu::getInstance()->isOptionChecked(MenuOption::Atmosphere)) {
-                        PerformanceTimer perfTimer("atmosphere");
-                        PerformanceWarning warn(Menu::getInstance()->isOptionChecked(MenuOption::PipelineWarnings),
-                            "Application::displaySide() ... atmosphere...");
-
-                        background->_environment->renderAtmospheres(batch, *(args->_viewFrustum));
-                    }
-
+                    static const float alpha = 1.0f;
+                    background->_stars.render(args, alpha);
                 }
             }
                 break;
@@ -3736,7 +3675,7 @@ namespace render {
 }
 
 
-void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool selfAvatarOnly, bool billboard) {
+void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool selfAvatarOnly) {
 
     // FIXME: This preRender call is temporary until we create a separate render::scene for the mirror rendering.
     // Then we can move this logic into the Avatar::simulate call.
@@ -3763,15 +3702,13 @@ void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool se
 
     // Background rendering decision
     if (BackgroundRenderData::_item == 0) {
-        auto backgroundRenderData = make_shared<BackgroundRenderData>(&_environment);
+        auto backgroundRenderData = make_shared<BackgroundRenderData>();
         auto backgroundRenderPayload = make_shared<BackgroundRenderData::Payload>(backgroundRenderData);
         BackgroundRenderData::_item = _main3DScene->allocateID();
         pendingChanges.resetItem(BackgroundRenderData::_item, backgroundRenderPayload);
-    } else {
-
     }
 
-   // Assuming nothing get's rendered through that
+    // Assuming nothing get's rendered through that
     if (!selfAvatarOnly) {
         if (DependencyManager::get<SceneScriptingInterface>()->shouldRenderEntities()) {
             // render models...
@@ -3799,16 +3736,17 @@ void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool se
         pendingChanges.resetItem(WorldBoxRenderData::_item, worldBoxRenderPayload);
     } else {
         pendingChanges.updateItem<WorldBoxRenderData>(WorldBoxRenderData::_item,
-                [](WorldBoxRenderData& payload) {
-                    payload._val++;
-                });
+            [](WorldBoxRenderData& payload) {
+            payload._val++;
+        });
     }
 
-    if (!billboard) {
+    // Setup the current Zone Entity lighting and skybox
+    // Fixme: We need a better soution through an actual render item !!!
+    {
         DependencyManager::get<DeferredLightingEffect>()->setAmbientLightMode(getRenderAmbientLight());
         auto skyStage = DependencyManager::get<SceneScriptingInterface>()->getSkyStage();
         DependencyManager::get<DeferredLightingEffect>()->setGlobalLight(skyStage->getSunLight()->getDirection(), skyStage->getSunLight()->getColor(), skyStage->getSunLight()->getIntensity(), skyStage->getSunLight()->getAmbientIntensity());
-        DependencyManager::get<DeferredLightingEffect>()->setGlobalAtmosphere(skyStage->getAtmosphere());
 
         auto skybox = model::SkyboxPointer();
         if (skyStage->getBackgroundMode() == model::SunSkyStage::SKY_BOX) {
@@ -3828,33 +3766,19 @@ void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool se
     {
         PerformanceTimer perfTimer("EngineRun");
 
-        auto renderInterface = DependencyManager::get<RenderScriptingInterface>();
-        auto renderContext = renderInterface->getRenderContext();
-
-        renderArgs->_shouldRender = LODManager::shouldRender;
         renderArgs->_viewFrustum = getDisplayViewFrustum();
-        renderContext.setArgs(renderArgs);
-
-        bool occlusionStatus = Menu::getInstance()->isOptionChecked(MenuOption::DebugAmbientOcclusion);
-        bool antialiasingStatus = Menu::getInstance()->isOptionChecked(MenuOption::Antialiasing);
-        bool showOwnedStatus = Menu::getInstance()->isOptionChecked(MenuOption::PhysicsShowOwned);
-        renderContext.setOptions(occlusionStatus, antialiasingStatus, showOwnedStatus);
-
-        _renderEngine->setRenderContext(renderContext);
+        _renderEngine->getRenderContext()->args = renderArgs;
 
         // Before the deferred pass, let's try to use the render engine
         myAvatar->startRenderRun();
         _renderEngine->run();
         myAvatar->endRenderRun();
-
-        auto engineContext = _renderEngine->getRenderContext();
-        renderInterface->setItemCounts(engineContext->getItemsConfig());
     }
 
     activeRenderingThread = nullptr;
 }
 
-void Application::renderRearViewMirror(RenderArgs* renderArgs, const QRect& region, bool billboard) {
+void Application::renderRearViewMirror(RenderArgs* renderArgs, const QRect& region) {
     auto originalViewport = renderArgs->_viewport;
     // Grab current viewport to reset it at the end
 
@@ -3864,12 +3788,7 @@ void Application::renderRearViewMirror(RenderArgs* renderArgs, const QRect& regi
     auto myAvatar = getMyAvatar();
 
     // bool eyeRelativeCamera = false;
-    if (billboard) {
-        fov = BILLBOARD_FIELD_OF_VIEW;  // degees
-        _mirrorCamera.setPosition(myAvatar->getPosition() +
-                                  myAvatar->getOrientation() * glm::vec3(0.0f, 0.0f, -1.0f) * BILLBOARD_DISTANCE * myAvatar->getScale());
-
-    } else if (!AvatarInputs::getInstance()->mirrorZoomed()) {
+    if (!AvatarInputs::getInstance()->mirrorZoomed()) {
         _mirrorCamera.setPosition(myAvatar->getChestPosition() +
                                   myAvatar->getOrientation() * glm::vec3(0.0f, 0.0f, -1.0f) * MIRROR_REARVIEW_BODY_DISTANCE * myAvatar->getScale());
 
@@ -3898,20 +3817,15 @@ void Application::renderRearViewMirror(RenderArgs* renderArgs, const QRect& regi
 
 
     // set the bounds of rear mirror view
-    gpu::Vec4i viewport;
-    if (billboard) {
-        viewport = gpu::Vec4i(0, 0, region.width(), region.height());
-    } else {
-        // if not rendering the billboard, the region is in device independent coordinates; must convert to device
-        float ratio = (float)QApplication::desktop()->windowHandle()->devicePixelRatio() * getRenderResolutionScale();
-        int width = region.width() * ratio;
-        int height = region.height() * ratio;
-        viewport = gpu::Vec4i(0, 0, width, height);
-    }
+    // the region is in device independent coordinates; must convert to device
+    float ratio = (float)QApplication::desktop()->windowHandle()->devicePixelRatio() * getRenderResolutionScale();
+    int width = region.width() * ratio;
+    int height = region.height() * ratio;
+    gpu::Vec4i viewport = gpu::Vec4i(0, 0, width, height);
     renderArgs->_viewport = viewport;
 
     // render rear mirror view
-    displaySide(renderArgs, _mirrorCamera, true, billboard);
+    displaySide(renderArgs, _mirrorCamera, true);
 
     renderArgs->_viewport =  originalViewport;
 }
@@ -4257,7 +4171,7 @@ void Application::registerScriptEngineWithApplicationServices(ScriptEngine* scri
     scriptEngine->registerFunction("HMD", "getHUDLookAtPosition3D", HMDScriptingInterface::getHUDLookAtPosition3D, 0);
 
     scriptEngine->registerGlobalObject("Scene", DependencyManager::get<SceneScriptingInterface>().data());
-    scriptEngine->registerGlobalObject("Render", DependencyManager::get<RenderScriptingInterface>().data());
+    scriptEngine->registerGlobalObject("Render", _renderEngine->getConfiguration().get());
 
     scriptEngine->registerGlobalObject("ScriptDiscoveryService", DependencyManager::get<ScriptEngines>().data());
 }
@@ -4301,19 +4215,16 @@ bool Application::acceptURL(const QString& urlString, bool defaultUpload) {
 }
 
 void Application::setSessionUUID(const QUuid& sessionUUID) {
+    // HACK: until we swap the library dependency order between physics and entities
+    // we cache the sessionID in two distinct places for physics.
+    Physics::setSessionUUID(sessionUUID); // TODO: remove this one
     _physicsEngine->setSessionUUID(sessionUUID);
 }
 
 bool Application::askToSetAvatarUrl(const QString& url) {
     QUrl realUrl(url);
     if (realUrl.isLocalFile()) {
-        QString message = "You can not use local files for avatar components.";
-
-        QMessageBox msgBox;
-        msgBox.setText(message);
-        msgBox.setStandardButtons(QMessageBox::Ok);
-        msgBox.setIcon(QMessageBox::Warning);
-        msgBox.exec();
+        OffscreenUi::warning("", "You can not use local files for avatar components.");
         return false;
     }
 
@@ -4322,32 +4233,22 @@ bool Application::askToSetAvatarUrl(const QString& url) {
 
     FSTReader::ModelType modelType = FSTReader::predictModelType(fstMapping);
 
-    QMessageBox msgBox;
-    msgBox.setIcon(QMessageBox::Question);
-    msgBox.setWindowTitle("Set Avatar");
-    QPushButton* bodyAndHeadButton = NULL;
-
     QString modelName = fstMapping["name"].toString();
-    QString message;
-    QString typeInfo;
+    bool ok = false;
     switch (modelType) {
 
         case FSTReader::HEAD_AND_BODY_MODEL:
-            message = QString("Would you like to use '") + modelName + QString("' for your avatar?");
-            bodyAndHeadButton = msgBox.addButton(tr("Yes"), QMessageBox::ActionRole);
+             ok = QMessageBox::Ok == OffscreenUi::question("Set Avatar",
+							   "Would you like to use '" + modelName + "' for your avatar?",
+							   QMessageBox::Ok | QMessageBox::Cancel);
         break;
 
         default:
-            message = QString(modelName + QString("Does not support a head and body as required."));
+            OffscreenUi::warning("", modelName + "Does not support a head and body as required.");
         break;
     }
 
-    msgBox.setText(message);
-    msgBox.addButton(QMessageBox::Cancel);
-
-    msgBox.exec();
-
-    if (msgBox.clickedButton() == bodyAndHeadButton) {
+    if (ok) {
         getMyAvatar()->useFullAvatarURL(url, modelName);
         emit fullAvatarURLChanged(url, modelName);
     } else {
@@ -4511,27 +4412,16 @@ bool Application::askToWearAvatarAttachmentUrl(const QString& url) {
 
 void Application::displayAvatarAttachmentWarning(const QString& message) const {
     auto avatarAttachmentWarningTitle = tr("Avatar Attachment Failure");
-    QMessageBox msgBox;
-    msgBox.setIcon(QMessageBox::Warning);
-    msgBox.setWindowTitle(avatarAttachmentWarningTitle);
-    msgBox.setText(message);
-    msgBox.exec();
-    msgBox.addButton(QMessageBox::Ok);
-    msgBox.exec();
+    OffscreenUi::warning(avatarAttachmentWarningTitle, message);
 }
 
 bool Application::displayAvatarAttachmentConfirmationDialog(const QString& name) const {
     auto avatarAttachmentConfirmationTitle = tr("Avatar Attachment Confirmation");
-    auto avatarAttachmentConfirmationMessage = tr("Would you like to wear '%1' on your avatar?");
-    QMessageBox msgBox;
-    msgBox.setIcon(QMessageBox::Question);
-    msgBox.setWindowTitle(avatarAttachmentConfirmationTitle);
-    QPushButton* button = msgBox.addButton(tr("Yes"), QMessageBox::ActionRole);
-    QString message = avatarAttachmentConfirmationMessage.arg(name);
-    msgBox.setText(message);
-    msgBox.addButton(QMessageBox::Cancel);
-    msgBox.exec();
-    if (msgBox.clickedButton() == button) {
+    auto avatarAttachmentConfirmationMessage = tr("Would you like to wear '%1' on your avatar?").arg(name);
+    auto reply = OffscreenUi::question(avatarAttachmentConfirmationTitle,
+                                       avatarAttachmentConfirmationMessage,
+                                       QMessageBox::Ok | QMessageBox::Cancel);
+    if (QMessageBox::Ok == reply) {
         return true;
     } else {
         return false;
@@ -4598,31 +4488,27 @@ void Application::domainSettingsReceived(const QJsonObject& domainSettingsObject
 }
 
 void Application::loadDialog() {
-    // To be migratd to QML
-    QString fileNameString = QFileDialog::getOpenFileName(
-        _glWidget, tr("Open Script"), "", tr("JavaScript Files (*.js)"));
-    if (!fileNameString.isEmpty()) {
+    auto scriptEngines = DependencyManager::get<ScriptEngines>();
+    QString fileNameString = OffscreenUi::getOpenFileName(
+        _glWidget, tr("Open Script"), getPreviousScriptLocation(), tr("JavaScript Files (*.js)"));
+    if (!fileNameString.isEmpty() && QFile(fileNameString).exists()) {
+        setPreviousScriptLocation(QFileInfo(fileNameString).absolutePath());
         DependencyManager::get<ScriptEngines>()->loadScript(fileNameString, true, false, false, true);  // Don't load from cache
     }
 }
 
-void Application::loadScriptURLDialog() {
-    // To be migratd to QML
-    QInputDialog scriptURLDialog(getWindow());
-    scriptURLDialog.setWindowTitle("Open and Run Script URL");
-    scriptURLDialog.setLabelText("Script:");
-    scriptURLDialog.setWindowFlags(Qt::Sheet);
-    const float DIALOG_RATIO_OF_WINDOW = 0.30f;
-    scriptURLDialog.resize(scriptURLDialog.parentWidget()->size().width() * DIALOG_RATIO_OF_WINDOW,
-                        scriptURLDialog.size().height());
+QString Application::getPreviousScriptLocation() {
+    QString result = _previousScriptLocation.get();
+    return result;
+}
 
-    int dialogReturn = scriptURLDialog.exec();
-    QString newScript;
-    if (dialogReturn == QDialog::Accepted) {
-        if (scriptURLDialog.textValue().size() > 0) {
-            // the user input a new hostname, use that
-            newScript = scriptURLDialog.textValue();
-        }
+void Application::setPreviousScriptLocation(const QString& location) {
+    _previousScriptLocation.set(location);
+}
+
+void Application::loadScriptURLDialog() {
+    auto newScript = OffscreenUi::getText(nullptr, "Open and Run Script", "Script URL");
+    if (!newScript.isEmpty()) {
         DependencyManager::get<ScriptEngines>()->loadScript(newScript);
     }
 }
@@ -4652,10 +4538,10 @@ void Application::takeSnapshot() {
         return;
     }
 
-    if (!_snapshotShareDialog) {
-        _snapshotShareDialog = new SnapshotShareDialog(fileName, _glWidget);
-    }
-    _snapshotShareDialog->show();
+    DependencyManager::get<OffscreenUi>()->load("hifi/dialogs/SnapshotShareDialog.qml", [=](QQmlContext*, QObject* dialog) {
+        dialog->setProperty("source", QUrl::fromLocalFile(fileName));
+        connect(dialog, SIGNAL(uploadSnapshot(const QString& snapshot)), this, SLOT(uploadSnapshot(const QString& snapshot)));
+    });
 }
 
 float Application::getRenderResolutionScale() const {
@@ -4709,11 +4595,7 @@ void Application::notifyPacketVersionMismatch() {
         QString message = "The location you are visiting is running an incompatible server version.\n";
         message += "Content may not display properly.";
 
-        QMessageBox msgBox;
-        msgBox.setText(message);
-        msgBox.setStandardButtons(QMessageBox::Ok);
-        msgBox.setIcon(QMessageBox::Warning);
-        msgBox.exec();
+        OffscreenUi::warning("", message);
     }
 }
 
@@ -4722,11 +4604,7 @@ void Application::checkSkeleton() {
         qCDebug(interfaceapp) << "MyAvatar model has no skeleton";
 
         QString message = "Your selected avatar body has no skeleton.\n\nThe default body will be loaded...";
-        QMessageBox msgBox;
-        msgBox.setText(message);
-        msgBox.setStandardButtons(QMessageBox::Ok);
-        msgBox.setIcon(QMessageBox::Warning);
-        msgBox.exec();
+        OffscreenUi::warning("", message);
 
         getMyAvatar()->useFullAvatarURL(AvatarData::defaultFullAvatarModelUrl(), DEFAULT_FULL_AVATAR_MODEL_NAME);
     } else {
@@ -4746,22 +4624,6 @@ void Application::activeChanged(Qt::ApplicationState state) {
         default:
             _isForeground = false;
             break;
-    }
-}
-void Application::showFriendsWindow() {
-    const QString FRIENDS_WINDOW_OBJECT_NAME = "FriendsWindow";
-    const QString FRIENDS_WINDOW_TITLE = "Add/Remove Friends";
-    const QString FRIENDS_WINDOW_URL = "https://metaverse.highfidelity.com/user/friends";
-    const int FRIENDS_WINDOW_WIDTH = 290;
-    const int FRIENDS_WINDOW_HEIGHT = 500;
-    auto webWindowClass = _window->findChildren<WebWindowClass>(FRIENDS_WINDOW_OBJECT_NAME);
-    if (webWindowClass.empty()) {
-        auto friendsWindow = new WebWindowClass(FRIENDS_WINDOW_TITLE, FRIENDS_WINDOW_URL, FRIENDS_WINDOW_WIDTH,
-                                                FRIENDS_WINDOW_HEIGHT);
-        friendsWindow->setParent(_window);
-        friendsWindow->setObjectName(FRIENDS_WINDOW_OBJECT_NAME);
-        connect(friendsWindow, &WebWindowClass::closed, &WebWindowClass::deleteLater);
-        friendsWindow->setVisible(true);
     }
 }
 
@@ -5111,7 +4973,7 @@ void Application::setPalmData(Hand* hand, const controller::Pose& pose, float de
         palm.setActive(pose.isValid());
 
         // transform from sensor space, to world space, to avatar model space.
-        glm::mat4 poseMat = createMatFromQuatAndPos(pose.getRotation(), pose.getTranslation());
+        glm::mat4 poseMat = createMatFromQuatAndPos(pose.getRotation(), pose.getTranslation() * myAvatar->getScale());
         glm::mat4 sensorToWorldMat = myAvatar->getSensorToWorldMatrix();
         glm::mat4 modelMat = createMatFromQuatAndPos(myAvatar->getOrientation(), myAvatar->getPosition());
         glm::mat4 objectPose = glm::inverse(modelMat) * sensorToWorldMat * poseMat;
@@ -5182,4 +5044,31 @@ void Application::setActiveDisplayPlugin(const QString& pluginName) {
         }
     }
     updateDisplayMode();
+}
+
+void Application::handleLocalServerConnection() {
+    auto server = qobject_cast<QLocalServer*>(sender());
+
+    qDebug() << "Got connection on local server from additional instance - waiting for parameters";
+
+    auto socket = server->nextPendingConnection();
+
+    connect(socket, &QLocalSocket::readyRead, this, &Application::readArgumentsFromLocalSocket);
+
+    qApp->getWindow()->raise();
+    qApp->getWindow()->activateWindow();
+}
+
+void Application::readArgumentsFromLocalSocket() {
+    auto socket = qobject_cast<QLocalSocket*>(sender());
+
+    auto message = socket->readAll();
+    socket->deleteLater();
+
+    qDebug() << "Read from connection: " << message;
+
+    // If we received a message, try to open it as a URL
+    if (message.length() > 0) {
+        qApp->openUrl(QString::fromUtf8(message));
+    }
 }

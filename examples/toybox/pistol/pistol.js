@@ -1,6 +1,5 @@
 //
 //  pistol.js
-//  examples/toybox/entityScripts
 //
 //  Created by Eric Levin on11/11/15.
 //  Copyright 2015 High Fidelity, Inc.
@@ -16,7 +15,6 @@
     Script.include("../../libraries/constants.js");
 
     var _this;
-    // if the trigger value goes below this while held, the can will stop spraying.  if it goes above, it will spray
     var DISABLE_LASER_THRESHOLD = 0.2;
     var TRIGGER_CONTROLS = [
         Controller.Standard.LT,
@@ -54,7 +52,7 @@
             this.hand = JSON.parse(params[0]);
         },
 
-        continueNearGrab: function() {
+        continueEquip: function() {
             if (!this.equipped) {
                 return;
             }
@@ -63,8 +61,6 @@
                 this.updateLaser();
             }
             this.toggleWithTriggerPressure();
-
-
         },
 
         updateProps: function() {

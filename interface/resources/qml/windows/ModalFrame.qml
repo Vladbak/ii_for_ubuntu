@@ -5,25 +5,32 @@ import "../controls"
 
 Frame {
     id: frame
-    // The frame fills the parent, which should be the size of the content.
-    // The frame decorations use negative anchor margins to extend beyond 
-    anchors.fill: parent
-    property alias window: frame.parent
 
-    Rectangle {
+    Item {
         anchors.fill: parent
-        anchors.margins: -4096
-        visible: window.visible
-        color: "#7f7f7f7f";
-        radius: 3;
-        MouseArea {
+
+        Rectangle {
+            id: background
             anchors.fill: parent
-            acceptedButtons: Qt.AllButtons
-            onClicked: { }
-            onDoubleClicked: {}
-            onPressAndHold: {}
-            onReleased: {}
+            anchors.margins: -4096
+            visible: window.visible
+            color: "#7f7f7f7f";
+            radius: 3;
+        }
+
+        Text {
+            y: -implicitHeight - iconSize / 2
+            text: window.title
+            elide: Text.ElideRight
+            font.bold: true
+            color: window.focus ? "white" : "gray"
+            style: Text.Outline;
+            styleColor: "black"
         }
     }
+
+
+
+
 }
 
