@@ -111,6 +111,12 @@ else()
   add_executable(${TARGET_NAME} ${INTERFACE_SRCS} ${QM})
 endif()
 
+set_target_properties(
+    ${TARGET_NAME}
+    PROPERTIES 
+      OUTPUT_NAME ${APP_NAME}
+)
+
 target_include_directories(${TARGET_NAME} PRIVATE "${CMAKE_BINARY_DIR}/includes")
 
 #if (WIN32)
@@ -273,6 +279,6 @@ if (WIN32)
 endif()
 
 package_libraries_for_deployment()
-consolidate_stack_components()
+#consolidate_stack_components()
 unset(APP_NAME)
 
