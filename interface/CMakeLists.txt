@@ -259,14 +259,14 @@ else (APPLE)
   endif()
 endif (APPLE)
 
-if (SCRIPTS_INSTALL_DIR)
-  # setup install of scripts beside interface executable
-  install(
-    DIRECTORY "${CMAKE_SOURCE_DIR}/examples/"
-    DESTINATION ${SCRIPTS_INSTALL_DIR}/scripts
-    COMPONENT ${CLIENT_COMPONENT}
-  )
-endif()
+#UTII if (SCRIPTS_INSTALL_DIR)
+#UTII  # setup install of scripts beside interface executable
+#UTII  install(
+#UTII    DIRECTORY "${CMAKE_SOURCE_DIR}/examples/"
+#UTII    DESTINATION ${SCRIPTS_INSTALL_DIR}/scripts
+#UTII    COMPONENT ${CLIENT_COMPONENT}
+#UTII  )
+#UTII endif()
 
 if (WIN32)
     set(EXTRA_DEPLOY_OPTIONS "--qmldir  ${PROJECT_SOURCE_DIR}/resources/qml")

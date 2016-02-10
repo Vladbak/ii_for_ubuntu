@@ -64,7 +64,9 @@
     ; The Inner invocation has written an uninstaller binary for us.
     ; We need to sign it if it's a production or PR build.
     !if @PRODUCTION_BUILD@ == 1
-      !system '"@SIGNTOOL_EXECUTABLE@" sign /f %HF_PFX_FILE% /p %HF_PFX_PASSPHRASE% /tr http://tsa.starfieldtech.com /td SHA256 $%TEMP%\@UNINSTALLER_NAME@' = 0
+      !ifdef $%HF_PFX_FILE%
+        !system '"@SIGNTOOL_EXECUTABLE@" sign /f %HF_PFX_FILE% /p %HF_PFX_PASSPHRASE% /tr http://tsa.starfieldtech.com /td SHA256 $%TEMP%\@UNINSTALLER_NAME@' = 0
+      !endif
     !endif
 
     ; Good.  Now we can carry on writing the real installer.
@@ -349,7 +351,7 @@ Section "-Core installation"
   ;The following delete blocks are temporary and can be removed once users who had the initial installer have updated
 
   ;Delete any server-console files installed before it was placed in sub-folder
-  Delete "$INSTDIR\server-console.exe"
+;UTII  Delete "$INSTDIR\server-console.exe"
   RMDir /r "$INSTDIR\locales"
   RMDir /r "$INSTDIR\resources\app"
   Delete "$INSTDIR\resources\atom.asar"
@@ -442,21 +444,21 @@ Section "-Core installation"
     CreateShortCut "$SMPROGRAMS\$STARTMENU_FOLDER\@INTERFACE_SHORTCUT_NAME@.lnk" \
       "$INSTDIR\@INTERFACE_WIN_EXEC_NAME@"
 
-    ${If} "@PRODUCTION_BUILD@" == "1"
-      ; hifi:// protocol handler registry entries
-      WriteRegStr HKCR '@HIGH_FIDELITY_PROTOCOL@' '' 'URL:High Fidelity Protocol'
-      WriteRegStr HKCR '@HIGH_FIDELITY_PROTOCOL@' 'URL Protocol' ''
-      WriteRegStr HKCR '@HIGH_FIDELITY_PROTOCOL@\DefaultIcon' '' '$INSTDIR\@INTERFACE_WIN_EXEC_NAME@,1'
-      WriteRegStr HKCR '@HIGH_FIDELITY_PROTOCOL@\shell\open\command' '' '$INSTDIR\@INTERFACE_WIN_EXEC_NAME@ --url "%1"'
-    ${EndIf}
+;UTII    ${If} "@PRODUCTION_BUILD@" == "1"
+;UTII      ; hifi:// protocol handler registry entries
+;UTII      WriteRegStr HKCR '@HIGH_FIDELITY_PROTOCOL@' '' 'URL:High Fidelity Protocol'
+;UTII      WriteRegStr HKCR '@HIGH_FIDELITY_PROTOCOL@' 'URL Protocol' ''
+;UTII      WriteRegStr HKCR '@HIGH_FIDELITY_PROTOCOL@\DefaultIcon' '' '$INSTDIR\@INTERFACE_WIN_EXEC_NAME@,1'
+;UTII      WriteRegStr HKCR '@HIGH_FIDELITY_PROTOCOL@\shell\open\command' '' '$INSTDIR\@INTERFACE_WIN_EXEC_NAME@ --url "%1"'
+;UTII    ${EndIf}
 
   ${EndIf}
 
   ; Conditional handling for server console shortcut
-  ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
-    CreateShortCut "$SMPROGRAMS\$STARTMENU_FOLDER\@CONSOLE_SHORTCUT_NAME@.lnk" \
-      "$INSTDIR\@CONSOLE_INSTALL_SUBDIR@\@CONSOLE_WIN_EXEC_NAME@"
-  ${EndIf}
+;UTII  ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
+;UTII    CreateShortCut "$SMPROGRAMS\$STARTMENU_FOLDER\@CONSOLE_SHORTCUT_NAME@.lnk" \
+;UTII      "$INSTDIR\@CONSOLE_INSTALL_SUBDIR@\@CONSOLE_WIN_EXEC_NAME@"
+;UTII  ${EndIf}
 
   CreateShortCut "$SMPROGRAMS\$STARTMENU_FOLDER\Uninstall.lnk" "$INSTDIR\@UNINSTALLER_NAME@"
 
@@ -538,29 +540,29 @@ Function PostInstallOptionsPage
     !insertmacro SetPostInstallOption $DesktopClientCheckbox @CLIENT_DESKTOP_SHORTCUT_REG_KEY@ ${BST_CHECKED}
   ${EndIf}
 
-  ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
-    ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Create a desktop shortcut for High Fidelity @CONSOLE_SHORTCUT_NAME@"
-    Pop $DesktopServerCheckbox
+;UTII  ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
+;UTII    ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Create a desktop shortcut for High Fidelity @CONSOLE_SHORTCUT_NAME@"
+;UTII    Pop $DesktopServerCheckbox
+;UTII
+;UTII    ; set the checkbox state depending on what is present in the registry
+;UTII    !insertmacro SetPostInstallOption $DesktopServerCheckbox @CONSOLE_DESKTOP_SHORTCUT_REG_KEY@ ${BST_UNCHECKED}
+;UTII
+;UTII    IntOp $CurrentOffset $CurrentOffset + 15
+;UTII
+;UTII    ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Launch High Fidelity @CONSOLE_SHORTCUT_NAME@ on startup"
+;UTII    Pop $ServerStartupCheckbox
+;UTII
+;UTII    ; set the checkbox state depending on what is present in the registry
+;UTII    !insertmacro SetPostInstallOption $ServerStartupCheckbox @CONSOLE_STARTUP_REG_KEY@ ${BST_CHECKED}
+;UTII
+;UTII    IntOp $CurrentOffset $CurrentOffset + 15
+;UTII  ${EndIf}
 
-    ; set the checkbox state depending on what is present in the registry
-    !insertmacro SetPostInstallOption $DesktopServerCheckbox @CONSOLE_DESKTOP_SHORTCUT_REG_KEY@ ${BST_UNCHECKED}
-
-    IntOp $CurrentOffset $CurrentOffset + 15
-
-    ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Launch High Fidelity @CONSOLE_SHORTCUT_NAME@ on startup"
-    Pop $ServerStartupCheckbox
-
-    ; set the checkbox state depending on what is present in the registry
-    !insertmacro SetPostInstallOption $ServerStartupCheckbox @CONSOLE_STARTUP_REG_KEY@ ${BST_CHECKED}
-
-    IntOp $CurrentOffset $CurrentOffset + 15
-  ${EndIf}
-
-  ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
-    ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Launch High Fidelity Server Console Now"
-  ${Else}
-    ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Launch High Fidelity Now"
-  ${EndIf}
+;UTII  ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
+;UTII    ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Launch High Fidelity Server Console Now"
+;UTII  ${Else}
+    ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Launch Infinity Island Now"
+;UTII  ${EndIf}
 
   Pop $LaunchNowCheckbox
 
@@ -573,18 +575,18 @@ Function PostInstallOptionsPage
       ${NSD_SetState} $DesktopClientCheckbox ${BST_UNCHECKED}
     ${EndIf}
 
-    ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
-      ${NSD_SetState} $DesktopServerCheckbox ${BST_UNCHECKED}
-      ${NSD_SetState} $ServerStartupCheckbox ${BST_UNCHECKED}
-    ${EndIf}
+;UTII    ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
+;UTII      ${NSD_SetState} $DesktopServerCheckbox ${BST_UNCHECKED}
+;UTII      ${NSD_SetState} $ServerStartupCheckbox ${BST_UNCHECKED}
+;UTII    ${EndIf}
 
     ; push the offset
     IntOp $CurrentOffset $CurrentOffset + 15
 
-    ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Copy settings and content from production install"
-    Pop $CopyFromProductionCheckbox
-
-    ${NSD_SetState} $CopyFromProductionCheckbox ${BST_CHECKED}
+;UTII    ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Copy settings and content from production install"
+;UTII    Pop $CopyFromProductionCheckbox
+;UTII
+;UTII    ${NSD_SetState} $CopyFromProductionCheckbox ${BST_CHECKED}
   ${EndIf}
 
   nsDialogs::Show
@@ -615,37 +617,37 @@ Function HandlePostInstallOptions
 
   ${EndIf}
 
-  ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
-    ; check if the user asked for a desktop shortcut to Server Console
-    ${NSD_GetState} $DesktopServerCheckbox $DesktopServerState
-
-    ${If} $DesktopServerState == ${BST_CHECKED}
-      CreateShortCut "$DESKTOP\@CONSOLE_SHORTCUT_NAME@.lnk" "$INSTDIR\@CONSOLE_INSTALL_SUBDIR@\@CONSOLE_WIN_EXEC_NAME@"
-      !insertmacro WritePostInstallOption @CONSOLE_DESKTOP_SHORTCUT_REG_KEY@ YES
-    ${Else}
-      !insertmacro WritePostInstallOption @CONSOLE_DESKTOP_SHORTCUT_REG_KEY@ NO
-    ${EndIf}
-
-    ; check if the user asked to have Server Console launched every startup
-    ${NSD_GetState} $ServerStartupCheckbox $ServerStartupState
-
-    ${If} $ServerStartupState == ${BST_CHECKED}
-      ; in case we added a shortcut in the global context, pull that now
-      SetShellVarContext all
-      Delete "$SMSTARTUP\@CONSOLE_SHORTCUT_NAME@.lnk"
-
-      ; make a startup shortcut in this user's current context
-      SetShellVarContext current
-      CreateShortCut "$SMSTARTUP\@CONSOLE_SHORTCUT_NAME@.lnk" "$INSTDIR\@CONSOLE_INSTALL_SUBDIR@\@CONSOLE_WIN_EXEC_NAME@"
-
-      ; reset the shell var context back
-      SetShellVarContext all
-
-      !insertmacro WritePostInstallOption @CONSOLE_STARTUP_REG_KEY@ YES
-    ${Else}
-      !insertmacro WritePostInstallOption @CONSOLE_STARTUP_REG_KEY@ NO
-    ${EndIf}
-  ${EndIf}
+;UTII  ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
+;UTII    ; check if the user asked for a desktop shortcut to Server Console
+;UTII    ${NSD_GetState} $DesktopServerCheckbox $DesktopServerState
+;UTII
+;UTII    ${If} $DesktopServerState == ${BST_CHECKED}
+;UTII      CreateShortCut "$DESKTOP\@CONSOLE_SHORTCUT_NAME@.lnk" "$INSTDIR\@CONSOLE_INSTALL_SUBDIR@\@CONSOLE_WIN_EXEC_NAME@"
+;UTII      !insertmacro WritePostInstallOption @CONSOLE_DESKTOP_SHORTCUT_REG_KEY@ YES
+;UTII    ${Else}
+;UTII      !insertmacro WritePostInstallOption @CONSOLE_DESKTOP_SHORTCUT_REG_KEY@ NO
+;UTII    ${EndIf}
+;UTII
+;UTII    ; check if the user asked to have Server Console launched every startup
+;UTII    ${NSD_GetState} $ServerStartupCheckbox $ServerStartupState
+;UTII
+;UTII    ${If} $ServerStartupState == ${BST_CHECKED}
+;UTII      ; in case we added a shortcut in the global context, pull that now
+;UTII      SetShellVarContext all
+;UTII      Delete "$SMSTARTUP\@CONSOLE_SHORTCUT_NAME@.lnk"
+;UTII
+;UTII      ; make a startup shortcut in this user's current context
+;UTII      SetShellVarContext current
+;UTII      CreateShortCut "$SMSTARTUP\@CONSOLE_SHORTCUT_NAME@.lnk" "$INSTDIR\@CONSOLE_INSTALL_SUBDIR@\@CONSOLE_WIN_EXEC_NAME@"
+;UTII
+;UTII      ; reset the shell var context back
+;UTII      SetShellVarContext all
+;UTII
+;UTII      !insertmacro WritePostInstallOption @CONSOLE_STARTUP_REG_KEY@ YES
+;UTII    ${Else}
+;UTII      !insertmacro WritePostInstallOption @CONSOLE_STARTUP_REG_KEY@ NO
+;UTII    ${EndIf}
+;UTII  ${EndIf}
 
   ${If} @PR_BUILD@ == 1
 
@@ -663,7 +665,7 @@ Function HandlePostInstallOptions
       ClearErrors
 
       ; copy the data from production build to this PR build
-      CopyFiles "$APPDATA\High Fidelity\*" $0
+      CopyFiles "$APPDATA\Infinity Island\*" $0
 
       ; handle an error in copying files
       IfErrors 0 NoError
@@ -685,11 +687,11 @@ Function HandlePostInstallOptions
 
     ; both launches use the explorer trick in case the user has elevated permissions for the installer
     ; it won't be possible to use this approach if either application should be launched with a command line param
-    ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
-      Exec '"$WINDIR\explorer.exe" "$INSTDIR\@CONSOLE_INSTALL_SUBDIR@\@CONSOLE_WIN_EXEC_NAME@"'
-    ${Else}
-      Exec '"$WINDIR\explorer.exe" "$INSTDIR\@INTERFACE_WIN_EXEC_NAME@"'
-    ${EndIf}
+;UTII    ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
+;UTII      Exec '"$WINDIR\explorer.exe" "$INSTDIR\@CONSOLE_INSTALL_SUBDIR@\@CONSOLE_WIN_EXEC_NAME@"'
+;UTII    ${Else}
+      Exec '"$WINDIR\explorer.exe" "\"$INSTDIR\@INTERFACE_WIN_EXEC_NAME@\""'
+;UTII    ${EndIf}
   ${Else}
     !insertmacro WritePostInstallOption @LAUNCH_NOW_REG_KEY@ NO
   ${EndIf}
@@ -703,7 +705,7 @@ FunctionEnd
 
   Prompt_${UniqueID}:
 
-    ${nsProcess::FindProcess} ${applicationName} $R0
+    ${nsProcess::FindProcess} "${applicationName}" $R0
 
     ${If} $R0 == 0
 
@@ -721,10 +723,10 @@ FunctionEnd
 !macroend
 
 !macro CheckForRunningApplications action prompter
-  !insertmacro PromptForRunningApplication "@INTERFACE_WIN_EXEC_NAME@" "High Fidelity client" ${action} ${prompter}
-  !insertmacro PromptForRunningApplication "@CONSOLE_WIN_EXEC_NAME@" "Server Console" ${action} ${prompter}
-  !insertmacro PromptForRunningApplication "@DS_EXEC_NAME@" "Domain Server" ${action} ${prompter}
-  !insertmacro PromptForRunningApplication "@AC_EXEC_NAME@" "Assignment Client" ${action} ${prompter}
+  !insertmacro PromptForRunningApplication "@INTERFACE_WIN_EXEC_NAME@" "Infinity Island client" ${action} ${prompter}
+;UTII  !insertmacro PromptForRunningApplication "@CONSOLE_WIN_EXEC_NAME@" "Server Console" ${action} ${prompter}
+;UTII  !insertmacro PromptForRunningApplication "@DS_EXEC_NAME@" "Domain Server" ${action} ${prompter}
+;UTII  !insertmacro PromptForRunningApplication "@AC_EXEC_NAME@" "Assignment Client" ${action} ${prompter}
 !macroend
 
 ;--------------------------------
@@ -808,7 +810,7 @@ Function .onSelChange
 
   ; if neither component is selected, disable the install button
   ${IfNot} ${SectionIsSelected} ${@CLIENT_COMPONENT_NAME@}
-  ${AndIfNot} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
+;UTII  ${AndIfNot} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
     GetDlgItem $0 $HWNDPARENT 1
     EnableWindow $0 0
   ${Else}
@@ -865,13 +867,13 @@ Section "Uninstall"
 
   Delete "$SMPROGRAMS\$MUI_TEMP\Uninstall.lnk"
   Delete "$SMPROGRAMS\$MUI_TEMP\@INTERFACE_SHORTCUT_NAME@.lnk"
-  Delete "$SMPROGRAMS\$MUI_TEMP\@CONSOLE_SHORTCUT_NAME@.lnk"
+;UTII  Delete "$SMPROGRAMS\$MUI_TEMP\@CONSOLE_SHORTCUT_NAME@.lnk"
   Delete "$DESKTOP\@INTERFACE_SHORTCUT_NAME@.lnk"
-  Delete "$DESKTOP\@CONSOLE_SHORTCUT_NAME@.lnk"
+;UTII  Delete "$DESKTOP\@CONSOLE_SHORTCUT_NAME@.lnk"
 
   ; if it exists, delete the startup shortcut for the current user
   SetShellVarContext current
-  Delete "$SMSTARTUP\@CONSOLE_SHORTCUT_NAME@.lnk"
+;UTII  Delete "$SMSTARTUP\@CONSOLE_SHORTCUT_NAME@.lnk"
   SetShellVarContext all
 
 @CPACK_NSIS_DELETE_ICONS@
@@ -903,7 +905,7 @@ Section "Uninstall"
   StrCpy $MUI_TEMP "$START_MENU"
   Delete "$SMPROGRAMS\$MUI_TEMP\Uninstall.lnk"
   Delete "$SMPROGRAMS\$MUI_TEMP\@INTERFACE_SHORTCUT_NAME@.lnk"
-  Delete "$SMPROGRAMS\$MUI_TEMP\@CONSOLE_SHORTCUT_NAME@.lnk"
+;UTII  Delete "$SMPROGRAMS\$MUI_TEMP\@CONSOLE_SHORTCUT_NAME@.lnk"
 @CPACK_NSIS_DELETE_ICONS_EXTRA@
 
   ;Delete empty start menu parent diretories

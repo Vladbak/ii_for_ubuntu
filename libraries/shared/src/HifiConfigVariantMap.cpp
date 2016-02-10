@@ -133,7 +133,7 @@ void HifiConfigVariantMap::loadMasterAndUserConfig(const QStringList& argumentLi
                                                             QCoreApplication::applicationName(),
                                                             USER_CONFIG_FILE_NAME);
 
-        oldConfigFilename = oldConfigFilename.replace("High Fidelity - dev", "High Fidelity");
+        oldConfigFilename = oldConfigFilename.replace("Infinity Island - dev", "Infinity Island");
 
 
         // check if there's already a config file at the new path

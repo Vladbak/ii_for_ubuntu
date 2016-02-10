@@ -48,45 +48,45 @@ macro(SET_PACKAGING_PARAMETERS)
 
     set(DMG_SUBFOLDER_ICON "${HF_CMAKE_DIR}/installer/install-folder.rsrc")
 
-    set(CONSOLE_INSTALL_DIR ${DMG_SUBFOLDER_NAME})
+#UTII     set(CONSOLE_INSTALL_DIR ${DMG_SUBFOLDER_NAME})
     set(INTERFACE_INSTALL_DIR ${DMG_SUBFOLDER_NAME})
 
-    set(CONSOLE_EXEC_NAME "Server Console.app")
-    set(CONSOLE_INSTALL_APP_PATH "${CONSOLE_INSTALL_DIR}/${CONSOLE_EXEC_NAME}")
+#UTII     set(CONSOLE_EXEC_NAME "Server Console.app")
+#UTII     set(CONSOLE_INSTALL_APP_PATH "${CONSOLE_INSTALL_DIR}/${CONSOLE_EXEC_NAME}")
 
-    set(CONSOLE_APP_CONTENTS "${CONSOLE_INSTALL_APP_PATH}/Contents")
+#UTII     set(CONSOLE_APP_CONTENTS "${CONSOLE_INSTALL_APP_PATH}/Contents")
     set(COMPONENT_APP_PATH "${CONSOLE_APP_CONTENTS}/MacOS/Components.app")
     set(COMPONENT_INSTALL_DIR "${COMPONENT_APP_PATH}/Contents/MacOS")
 
     set(INTERFACE_INSTALL_APP_PATH "${CONSOLE_INSTALL_DIR}/${INTERFACE_BUNDLE_NAME}.app")
     set(INTERFACE_ICON_FILENAME "${INTERFACE_ICON_PREFIX}.icns")
   else ()
-    if (WIN32)
-      set(CONSOLE_INSTALL_DIR "server-console")
-    else ()
-      set(CONSOLE_INSTALL_DIR ".")
-    endif ()
+#UTII     if (WIN32)
+#UTII       set(CONSOLE_INSTALL_DIR "server-console")
+#UTII     else ()
+#UTII       set(CONSOLE_INSTALL_DIR ".")
+#UTII     endif ()
 
     set(COMPONENT_INSTALL_DIR ".")
     set(INTERFACE_INSTALL_DIR ".")
   endif ()
 
   if (WIN32)
-    set(INTERFACE_EXEC_PREFIX "interface")
+    set(INTERFACE_EXEC_PREFIX "Infinity Island")
     set(INTERFACE_ICON_FILENAME "${INTERFACE_ICON_PREFIX}.ico")
 
-    set(CONSOLE_EXEC_NAME "server-console.exe")
+#UTII     set(CONSOLE_EXEC_NAME "server-console.exe")
 
-    set(DS_EXEC_NAME "domain-server.exe")
-    set(AC_EXEC_NAME "assignment-client.exe")
+#UTII     set(DS_EXEC_NAME "domain-server.exe")
+#UTII     set(AC_EXEC_NAME "assignment-client.exe")
 
     # shortcut names
     if (PRODUCTION_BUILD)
       set(INTERFACE_SHORTCUT_NAME "High Fidelity")
-      set(CONSOLE_SHORTCUT_NAME "Server Console")
+#UTII       set(CONSOLE_SHORTCUT_NAME "Server Console")
     else ()
       set(INTERFACE_SHORTCUT_NAME "High Fidelity - ${BUILD_VERSION}")
-      set(CONSOLE_SHORTCUT_NAME "Server Console - ${BUILD_VERSION}")
+#UTII       set(CONSOLE_SHORTCUT_NAME "Server Console - ${BUILD_VERSION}")
     endif ()
     # check if we need to find signtool
     if (PRODUCTION_BUILD OR PR_BUILD)
@@ -101,15 +101,15 @@ macro(SET_PACKAGING_PARAMETERS)
     set(REGISTRY_HKLM_INSTALL_ROOT "Software")
     set(POST_INSTALL_OPTIONS_REG_GROUP "PostInstallOptions")
     set(CLIENT_DESKTOP_SHORTCUT_REG_KEY "ClientDesktopShortcut")
-    set(CONSOLE_DESKTOP_SHORTCUT_REG_KEY "ConsoleDesktopShortcut")
-    set(CONSOLE_STARTUP_REG_KEY "ConsoleStartupShortcut")
+#UTII     set(CONSOLE_DESKTOP_SHORTCUT_REG_KEY "ConsoleDesktopShortcut")
+#UTII     set(CONSOLE_STARTUP_REG_KEY "ConsoleStartupShortcut")
     set(LAUNCH_NOW_REG_KEY "LaunchAfterInstall")
   endif ()
 
   # setup component categories for installer
-  set(DDE_COMPONENT dde)
+#UTII   set(DDE_COMPONENT dde)
   set(CLIENT_COMPONENT client)
-  set(SERVER_COMPONENT server)
+#UTII   set(SERVER_COMPONENT server)
 
   # create a header file our targets can use to find out the application version
   file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/includes")
