@@ -82,10 +82,10 @@ macro(SET_PACKAGING_PARAMETERS)
 
     # shortcut names
     if (PRODUCTION_BUILD)
-      set(INTERFACE_SHORTCUT_NAME "High Fidelity")
+      set(INTERFACE_SHORTCUT_NAME "Infinity Island")
 #UTII       set(CONSOLE_SHORTCUT_NAME "Server Console")
     else ()
-      set(INTERFACE_SHORTCUT_NAME "High Fidelity - ${BUILD_VERSION}")
+      set(INTERFACE_SHORTCUT_NAME "Infinity Island - ${BUILD_VERSION}")
 #UTII       set(CONSOLE_SHORTCUT_NAME "Server Console - ${BUILD_VERSION}")
     endif ()
     # check if we need to find signtool
