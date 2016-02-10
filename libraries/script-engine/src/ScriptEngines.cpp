@@ -206,7 +206,7 @@ QVariantList ScriptEngines::getRunning() {
 
 
 static const QString SETTINGS_KEY = "Settings";
-static const QString DEFAULT_SCRIPTS_JS_URL = "http://s3.amazonaws.com/hifi-public/scripts/defaultScripts.js";
+static const QString DEFAULT_SCRIPTS_JS_URL = "http://hifi-assets.e-spaces.com/scripts/defaultScripts.js";
 
 void ScriptEngines::loadDefaultScripts() {
     loadScript(DEFAULT_SCRIPTS_JS_URL);
