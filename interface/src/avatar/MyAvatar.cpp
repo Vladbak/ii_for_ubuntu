@@ -383,6 +383,7 @@ void MyAvatar::simulate(float deltaTime) {
     EntityTreeRenderer* entityTreeRenderer = qApp->getEntities();
     EntityTreePointer entityTree = entityTreeRenderer ? entityTreeRenderer->getTree() : nullptr;
     if (entityTree) {
+        auto now = usecTimestampNow();
         EntityEditPacketSender* packetSender = qApp->getEntityEditPacketSender();
         MovingEntitiesOperator moveOperator(entityTree);
         forEachDescendant([&](SpatiallyNestablePointer object) {
@@ -397,6 +398,7 @@ void MyAvatar::simulate(float deltaTime) {
                 if (packetSender) {
                     EntityItemProperties properties = entity->getProperties();
                     properties.setQueryAACubeDirty();
+                    properties.setLastEdited(now);
                     packetSender->queueEditEntityMessage(PacketType::EntityEdit, entity->getID(), properties);
                     entity->setLastBroadcast(usecTimestampNow());
                 }
@@ -1078,6 +1080,15 @@ void MyAvatar::rebuildCollisionShape() {
 
 void MyAvatar::prepareForPhysicsSimulation() {
     relayDriveKeysToCharacterController();
+
+    bool success;
+    glm::vec3 parentVelocity = getParentVelocity(success);
+    if (!success) {
+        qDebug() << "Warning: getParentVelocity failed" << getID();
+        parentVelocity = glm::vec3();
+    }
+    _characterController.setParentVelocity(parentVelocity);
+
     _characterController.setTargetVelocity(getTargetVelocity());
     _characterController.setPositionAndOrientation(getPosition(), getOrientation());
     if (qApp->isHMDMode()) {
@@ -1381,7 +1392,7 @@ void MyAvatar::updateOrientation(float deltaTime) {
         desiredFacing.y = 0.0f;
 
         // This is our reference frame, it is captured when the user begins to move.
-        glm::vec3 referenceFacing = transformVector(_sensorToWorldMatrix, _hoverReferenceCameraFacing);
+        glm::vec3 referenceFacing = transformVectorFast(_sensorToWorldMatrix, _hoverReferenceCameraFacing);
         referenceFacing.y = 0.0f;
         referenceFacing = glm::normalize(referenceFacing);
         glm::vec3 referenceRight(referenceFacing.z, 0.0f, -referenceFacing.x);
@@ -1586,7 +1597,7 @@ void MyAvatar::updatePosition(float deltaTime) {
     if (!_hoverReferenceCameraFacingIsCaptured && (fabs(_driveKeys[TRANSLATE_Z]) > 0.1f || fabs(_driveKeys[TRANSLATE_X]) > 0.1f)) {
         _hoverReferenceCameraFacingIsCaptured = true;
         // transform the camera facing vector into sensor space.
-        _hoverReferenceCameraFacing = transformVector(glm::inverse(_sensorToWorldMatrix), getHead()->getCameraOrientation() * Vectors::UNIT_Z);
+        _hoverReferenceCameraFacing = transformVectorFast(glm::inverse(_sensorToWorldMatrix), getHead()->getCameraOrientation() * Vectors::UNIT_Z);
     } else if (_hoverReferenceCameraFacingIsCaptured && (fabs(_driveKeys[TRANSLATE_Z]) <= 0.1f && fabs(_driveKeys[TRANSLATE_X]) <= 0.1f)) {
         _hoverReferenceCameraFacingIsCaptured = false;
     }

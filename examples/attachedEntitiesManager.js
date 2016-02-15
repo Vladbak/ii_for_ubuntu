@@ -18,7 +18,7 @@ var DEFAULT_WEARABLE_DATA = {
 };
 
 
-var MINIMUM_DROP_DISTANCE_FROM_JOINT = 0.4;
+var MINIMUM_DROP_DISTANCE_FROM_JOINT = 0.8;
 var ATTACHED_ENTITY_SEARCH_DISTANCE = 10.0;
 var ATTACHED_ENTITIES_SETTINGS_KEY = "ATTACHED_ENTITIES";
 var DRESSING_ROOM_DISTANCE = 2.0;
@@ -120,10 +120,7 @@ function AttachedEntitiesManager() {
             parsedMessage.action === 'loaded') {
             // ignore
         } else if (parsedMessage.action === 'release') {
-            manager.checkIfWearable(parsedMessage.grabbedEntity, parsedMessage.joint)
-            // manager.saveAttachedEntities();
-        } else if (parsedMessage.action === 'shared-release') {
-            manager.updateRelativeOffsets(parsedMessage.grabbedEntity);
+            manager.handleEntityRelease(parsedMessage.grabbedEntity, parsedMessage.joint)
             // manager.saveAttachedEntities();
         } else if (parsedMessage.action === 'equip') {
             // manager.saveAttachedEntities();
@@ -145,10 +142,17 @@ function AttachedEntitiesManager() {
         return false;
     }
 
-    this.checkIfWearable = function(grabbedEntity, releasedFromJoint) {
+    this.handleEntityRelease = function(grabbedEntity, releasedFromJoint) {
+        // if this is still equipped, just rewrite the position information.
+        var grabData = getEntityCustomData('grabKey', grabbedEntity, {});
+        if ("refCount" in grabData && grabData.refCount > 0) {
+            manager.updateRelativeOffsets(grabbedEntity);
+            return;
+        }
+
         var allowedJoints = getEntityCustomData('wearable', grabbedEntity, DEFAULT_WEARABLE_DATA).joints;
 
-        var props = Entities.getEntityProperties(grabbedEntity, ["position", "parentID"]);
+        var props = Entities.getEntityProperties(grabbedEntity, ["position", "parentID", "parentJointIndex"]);
         if (props.parentID === NULL_UUID || props.parentID === MyAvatar.sessionUUID) {
             var bestJointName = "";
             var bestJointIndex = -1;
@@ -161,7 +165,7 @@ function AttachedEntitiesManager() {
                     continue;
                 }
                 var jointIndex = MyAvatar.getJointIndex(jointName);
-                if (jointIndex > 0) {
+                if (jointIndex >= 0) {
                     var jointPosition = MyAvatar.getJointPosition(jointIndex);
                     var distanceFromJoint = Vec3.distance(jointPosition, props.position);
                     if (distanceFromJoint <= MINIMUM_DROP_DISTANCE_FROM_JOINT) {
@@ -181,8 +185,10 @@ function AttachedEntitiesManager() {
                     parentJointIndex: bestJointIndex
                 };
 
-                if (bestJointOffset && bestJointOffset.constructor === Array && bestJointOffset.length > 1) {
-                    if (!this.avatarIsInDressingRoom()) {
+                if (bestJointOffset && bestJointOffset.constructor === Array) {
+                    if (this.avatarIsInDressingRoom() || bestJointOffset.length < 2) {
+                        this.updateRelativeOffsets(grabbedEntity);
+                    } else {
                         // don't snap the entity to the preferred position if the avatar is in the dressing room.
                         wearProps.localPosition = bestJointOffset[0];
                         wearProps.localRotation = bestJointOffset[1];
@@ -190,10 +196,14 @@ function AttachedEntitiesManager() {
                 }
                 Entities.editEntity(grabbedEntity, wearProps);
             } else if (props.parentID != NULL_UUID) {
-                // drop the entity with no parent (not on the avatar)
-                Entities.editEntity(grabbedEntity, {
-                    parentID: NULL_UUID
-                });
+                // drop the entity and set it to have no parent (not on the avatar), unless it's being equipped in a hand.
+                if (props.parentID === MyAvatar.sessionUUID &&
+                    (props.parentJointIndex == MyAvatar.getJointIndex("RightHand") ||
+                     props.parentJointIndex == MyAvatar.getJointIndex("LeftHand"))) {
+                    // this is equipped on a hand -- don't clear the parent.
+                } else {
+                    Entities.editEntity(grabbedEntity, { parentID: NULL_UUID });
+                }
             }
         }
     }

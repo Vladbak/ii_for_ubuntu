@@ -62,6 +62,7 @@ void LoadingScreen::checkDownloadProgress() {
         }
         float newPercentage = ((float)loadedCount / (float)totalCount);
         if (fabs(newPercentage - _percentage) >= 0.01f) {
+            qDebug() << "perc " << newPercentage << "  " << _percentage;
             _percentage = newPercentage;
             emit percentageChanged();
         }
