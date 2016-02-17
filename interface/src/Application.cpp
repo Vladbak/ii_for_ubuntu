@@ -596,7 +596,7 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     connect(&accountManager, &AccountManager::usernameChanged, this, &Application::updateWindowTitle);
 
     // set the account manager's root URL and trigger a login request if we don't have the access token
-    accountManager.setAuthURL(NetworkingConstants::METAVERSE_SERVER_URL);
+    accountManager.setAuthURL(NetworkingConstants::UTII_AUTH_SERVER_URL);
     UserActivityLogger::getInstance().launch(applicationVersion());
 
     // once the event loop has started, check and signal for an access token

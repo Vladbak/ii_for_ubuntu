@@ -183,7 +183,8 @@ void AccountManager::sendRequest(const QString& path,
     
     QNetworkRequest networkRequest;
     networkRequest.setHeader(QNetworkRequest::UserAgentHeader, HIGH_FIDELITY_USER_AGENT);
-    
+    networkRequest.setRawHeader("Accept", "application/json");
+
     QUrl requestURL = _authURL;
     
     if (path.startsWith("/")) {
@@ -283,6 +284,7 @@ void AccountManager::processReply() {
     } else {
         passErrorToCallback(requestReply);
     }
+    qCDebug(networking) << "request reply: " << requestReply->readAll();
     requestReply->deleteLater();
 }
 
@@ -382,17 +384,28 @@ void AccountManager::requestAccessToken(const QString& login, const QString& pas
     grantURL.setPath("/oauth/token");
 
     const QString ACCOUNT_MANAGER_REQUESTED_SCOPE = "owner";
+    //QJsonDocument newDoc = new QJsonDocument();
+    //newDoc.
+    QJsonObject jsonObj;
+    jsonObj["grant_type"] = "password";
+    jsonObj["username"] = login;
+    jsonObj["password"] = password;
+    jsonObj["scope"] = ACCOUNT_MANAGER_REQUESTED_SCOPE;
+    jsonObj["client_id"] = "utii";
+    //QByteArray postData;
+    //postData.append("grant_type=password&");
+    //postData.append("username=" + login + "&");
+    //postData.append("password=" + QUrl::toPercentEncoding(password) + "&");
+    //postData.append("scope=" + ACCOUNT_MANAGER_REQUESTED_SCOPE);
 
-    QByteArray postData;
-    postData.append("grant_type=password&");
-    postData.append("username=" + login + "&");
-    postData.append("password=" + QUrl::toPercentEncoding(password) + "&");
-    postData.append("scope=" + ACCOUNT_MANAGER_REQUESTED_SCOPE);
-
+    QJsonDocument doc(jsonObj);
+    QString postData(doc.toJson(QJsonDocument::Compact));
+    QByteArray postDataBytes;
+    postDataBytes.append(postData);
     request.setUrl(grantURL);
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"/* "application/x-www-form-urlencoded"*/);
 
-    QNetworkReply* requestReply = networkAccessManager.post(request, postData);
+    QNetworkReply* requestReply = networkAccessManager.post(request, postDataBytes);
     connect(requestReply, &QNetworkReply::finished, this, &AccountManager::requestAccessTokenFinished);
     connect(requestReply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(requestAccessTokenError(QNetworkReply::NetworkError)));
 }
@@ -401,9 +414,10 @@ void AccountManager::requestAccessToken(const QString& login, const QString& pas
 void AccountManager::requestAccessTokenFinished() {
     QNetworkReply* requestReply = reinterpret_cast<QNetworkReply*>(sender());
 
+    
     QJsonDocument jsonResponse = QJsonDocument::fromJson(requestReply->readAll());
     const QJsonObject& rootObject = jsonResponse.object();
-
+    
     if (!rootObject.contains("error")) {
         // construct an OAuthAccessToken from the json object
 
@@ -447,8 +461,9 @@ void AccountManager::requestProfile() {
     
     QNetworkRequest profileRequest(profileURL);
     profileRequest.setHeader(QNetworkRequest::UserAgentHeader, HIGH_FIDELITY_USER_AGENT);
+    profileRequest.setRawHeader("Accept", "application/json");
+    profileRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     profileRequest.setRawHeader(ACCESS_TOKEN_AUTHORIZATION_HEADER, _accountInfo.getAccessToken().authorizationHeaderValue());
-
     QNetworkReply* profileReply = networkAccessManager.get(profileRequest);
     connect(profileReply, &QNetworkReply::finished, this, &AccountManager::requestProfileFinished);
     connect(profileReply, SIGNAL(error(QNetworkReply::NetworkError)), this, SLOT(requestProfileError(QNetworkReply::NetworkError)));
@@ -457,6 +472,8 @@ void AccountManager::requestProfile() {
 void AccountManager::requestProfileFinished() {
     QNetworkReply* profileReply = reinterpret_cast<QNetworkReply*>(sender());
 
+    //qCDebug(networking) << "request reply: " << profileReply->readAll();
+    //return;
     QJsonDocument jsonResponse = QJsonDocument::fromJson(profileReply->readAll());
     const QJsonObject& rootObject = jsonResponse.object();
 
@@ -467,6 +484,8 @@ void AccountManager::requestProfileFinished() {
 
         // the username has changed to whatever came back
         emit usernameChanged(_accountInfo.getUsername());
+
+        emit roleChanged(_accountInfo.getRole());
 
         // store the whole profile into the local settings
         persistAccountToSettings();
@@ -515,18 +534,19 @@ void AccountManager::processGeneratedKeypair(const QByteArray& publicKey, const 
     const QString PUBLIC_KEY_UPDATE_PATH = "api/v1/user/public_key";
     
     // setup a multipart upload to send up the public key
-    QHttpMultiPart* requestMultiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
     
-    QHttpPart keyPart;
-    keyPart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("application/octet-stream"));
-    keyPart.setHeader(QNetworkRequest::ContentDispositionHeader,
-                      QVariant("form-data; name=\"public_key\"; filename=\"public_key\""));
-    keyPart.setBody(publicKey);
+    QJsonObject jsonObj;
+    jsonObj["public_key"] = QString(publicKey.toBase64());
+    qCDebug(networking) << "publicKey: " << publicKey.toBase64();
+
+    QJsonDocument doc(jsonObj);
+    QString postData(doc.toJson(QJsonDocument::Compact));
+    QByteArray postDataBytes;
+    postDataBytes.append(postData);
+
     
-    requestMultiPart->append(keyPart);
-    
-    sendRequest(PUBLIC_KEY_UPDATE_PATH, AccountManagerAuth::Required, QNetworkAccessManager::PutOperation,
-                JSONCallbackParameters(), QByteArray(), requestMultiPart);
+    sendRequest(PUBLIC_KEY_UPDATE_PATH, AccountManagerAuth::Required, QNetworkAccessManager::PostOperation,
+        JSONCallbackParameters(), postDataBytes);
     
     // get rid of the keypair generator now that we don't need it anymore
     sender()->deleteLater();

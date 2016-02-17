@@ -35,7 +35,7 @@ QNetworkReply* OAuthNetworkAccessManager::createRequest(QNetworkAccessManager::O
     AccountManager& accountManager = AccountManager::getInstance();
     
     if (accountManager.hasValidAccessToken()
-        && req.url().host() == NetworkingConstants::METAVERSE_SERVER_URL.host()) {
+        && req.url().host() == NetworkingConstants::UTII_AUTH_SERVER_URL.host()) {
         QNetworkRequest authenticatedRequest(req);
         authenticatedRequest.setHeader(QNetworkRequest::UserAgentHeader, HIGH_FIDELITY_USER_AGENT);
         authenticatedRequest.setRawHeader(ACCESS_TOKEN_AUTHORIZATION_HEADER,

@@ -14,13 +14,17 @@
 
 HIFI_QML_DEF(LoadingScreen)
 
+const int CHECK_DOWNLOAD_INTERVAL = MSECS_PER_SECOND / 2;
+const int MAX_STALL_TIME = 10000;
+
 LoadingScreen::LoadingScreen(QQuickItem *parent) : QQuickItem(parent)
 {
     _percentage = 0.0f;
+    _stallTime = 0;
     _downloading = false;
     _checkDownloadTimer = new QTimer(this);
     connect(_checkDownloadTimer, &QTimer::timeout, this, &LoadingScreen::checkDownloadProgress);
-    const int CHECK_DOWNLOAD_INTERVAL = MSECS_PER_SECOND / 2;
+    
     _checkDownloadTimer->start(CHECK_DOWNLOAD_INTERVAL);
 
     auto nodeList = DependencyManager::get<NodeList>();
@@ -62,18 +66,25 @@ void LoadingScreen::checkDownloadProgress() {
         }
         float newPercentage = ((float)loadedCount / (float)totalCount);
         if (fabs(newPercentage - _percentage) >= 0.01f) {
+            _stallTime = 0;
             qDebug() << "perc " << newPercentage << "  " << _percentage;
             _percentage = newPercentage;
             emit percentageChanged();
+            if (_foundRequest && _percentage > 0.99f) {
+                _checkDownloadTimer->stop();
+                setParent(NULL);
+                setParentItem(NULL);
+                deleteLater();
+            }
+            return;
         }
-    }
-
-    emit percentageChanged();
-    if (_foundRequest && _percentage > 0.99f) {
-        _checkDownloadTimer->stop();
-        setParent(NULL);
-        setParentItem(NULL);
-        deleteLater();
+        _stallTime += CHECK_DOWNLOAD_INTERVAL;
+        if (_stallTime > MAX_STALL_TIME) {
+            _checkDownloadTimer->stop();
+            setParent(NULL);
+            setParentItem(NULL);
+            deleteLater();
+        }
     }
 }
 

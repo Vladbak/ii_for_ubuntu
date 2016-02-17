@@ -80,6 +80,14 @@ void DataServerAccountInfo::setUsername(const QString& username) {
     }
 }
 
+void DataServerAccountInfo::setRole(const QString& role) {
+    if (_role != role) {
+        _role = role;
+
+        qCDebug(networking) << "Role changed to" << role;
+    }
+}
+
 void DataServerAccountInfo::setXMPPPassword(const QString& xmppPassword) {
      if (_xmppPassword != xmppPassword) {
          _xmppPassword = xmppPassword;
@@ -122,9 +130,11 @@ bool DataServerAccountInfo::hasProfile() const {
 void DataServerAccountInfo::setProfileInfoFromJSON(const QJsonObject& jsonObject) {
     QJsonObject user = jsonObject["data"].toObject()["user"].toObject();
     setUsername(user["username"].toString());
-    setXMPPPassword(user["xmpp_password"].toString());
-    setDiscourseApiKey(user["discourse_api_key"].toString());
-    setWalletID(QUuid(user["wallet_id"].toString()));
+    setRole(user["role"].toString());
+    //UTII We dont need this:
+    //setXMPPPassword(user["xmpp_password"].toString());
+    //setDiscourseApiKey(user["discourse_api_key"].toString());
+    //setWalletID(QUuid(user["wallet_id"].toString()));
 }
 
 QByteArray DataServerAccountInfo::getUsernameSignature(const QUuid& connectionToken) {

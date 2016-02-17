@@ -16,6 +16,7 @@
 
 namespace NetworkingConstants {
     const QUrl METAVERSE_SERVER_URL = QUrl("https://metaverse.highfidelity.com");
+    const QUrl UTII_AUTH_SERVER_URL = QUrl("http://148.251.192.170:8888");
 }
 
 #endif // hifi_NetworkingConstants_h

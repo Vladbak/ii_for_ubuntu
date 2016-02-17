@@ -13,7 +13,8 @@
 #define hifi_DdeFaceTracker_h
 
 #if defined(Q_OS_WIN) || defined(Q_OS_OSX)
-    #define HAVE_DDE
+//UTII: we don't need this
+//    #define HAVE_DDE
 #endif
 
 #include <QProcess>

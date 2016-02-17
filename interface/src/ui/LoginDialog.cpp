@@ -22,7 +22,7 @@
 HIFI_QML_DEF(LoginDialog)
 
 LoginDialog::LoginDialog(QQuickItem *parent) : OffscreenQmlDialog(parent),
-    _rootUrl(NetworkingConstants::METAVERSE_SERVER_URL.toString())
+    _rootUrl(NetworkingConstants::UTII_AUTH_SERVER_URL.toString())
 {
     connect(&AccountManager::getInstance(), &AccountManager::loginComplete,
         this, &LoginDialog::handleLoginCompleted);

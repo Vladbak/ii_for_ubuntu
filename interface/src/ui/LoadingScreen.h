@@ -28,6 +28,7 @@ public:
 private:
     bool _downloading;
     bool _foundRequest;
+    unsigned int _stallTime;
     QList<Resource*> _loadedResources;
     float _percentage;
     QTimer* _checkDownloadTimer;

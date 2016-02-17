@@ -34,6 +34,9 @@ public:
     const QString& getUsername() const { return _username; }
     void setUsername(const QString& username);
 
+    const QString& getRole() const { return _role; }
+    void setRole(const QString& role);
+
     const QString& getXMPPPassword() const { return _xmppPassword; }
     void setXMPPPassword(const QString& xmppPassword);
 
@@ -67,6 +70,7 @@ private:
 
     OAuthAccessToken _accessToken;
     QString _username;
+	QString _role;
     QString _xmppPassword;
     QString _discourseApiKey;
     QUuid _walletID;

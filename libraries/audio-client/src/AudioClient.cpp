@@ -90,7 +90,7 @@ AudioClient::AudioClient() :
     _averagedLatency(0.0f),
     _lastInputLoudness(0.0f),
     _timeSinceLastClip(-1.0f),
-    _muted(false),
+    _muted(true), // UTII: Mute microphones by default
     _shouldEchoLocally(false),
     _shouldEchoToServer(false),
     _isNoiseGateEnabled(true),

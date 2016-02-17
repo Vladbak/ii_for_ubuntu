@@ -92,6 +92,7 @@ signals:
     void authRequired();
     void authEndpointChanged();
     void usernameChanged(const QString& username);
+    void roleChanged(const QString& role);
     void profileChanged();
     void loginComplete(const QUrl& authURL);
     void loginFailed();

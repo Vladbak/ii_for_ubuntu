@@ -49,7 +49,7 @@ void CrashHandler::checkForAndHandleCrash() {
 
 CrashHandler::Action CrashHandler::promptUserForAction() {
     QDialog crashDialog;
-    crashDialog.setWindowTitle("Interface Crashed Last Run");
+    crashDialog.setWindowTitle("Infinity Island Crashed Last Run");
 
     QVBoxLayout* layout = new QVBoxLayout;
 
