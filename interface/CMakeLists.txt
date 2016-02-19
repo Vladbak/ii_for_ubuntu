@@ -280,7 +280,7 @@ if (WIN32)
     package_libraries_for_deployment()
 endif()
 
-package_libraries_for_deployment()
+#package_libraries_for_deployment()
 #consolidate_stack_components()
 unset(APP_NAME)
 

@@ -41,21 +41,21 @@ macro(PACKAGE_LIBRARIES_FOR_DEPLOYMENT)
       POST_BUILD
       COMMAND CMD /C "SET PATH=%PATH%;${QT_DIR}/bin && ${WINDEPLOYQT_COMMAND} ${EXTRA_DEPLOY_OPTIONS} $<$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>,$<CONFIG:RelWithDebInfo>>:--release> \"$<TARGET_FILE:${TARGET_NAME}>\""
     )
-  elseif (DEFINED BUILD_BUNDLE AND BUILD_BUNDLE AND APPLE)
-    find_program(MACDEPLOYQT_COMMAND macdeployqt PATHS ${QT_DIR}/bin NO_DEFAULT_PATH)
-    
-    if (NOT MACDEPLOYQT_COMMAND)
-      message(FATAL_ERROR "Could not find macdeployqt at ${QT_DIR}/bin. macdeployqt is required.")
-    endif ()
-  
-    if (NOT APP_NAME)
-        set(APP_NAME TARGET_NAME)
-    endif ()
-    # add a post-build command to call macdeployqt to copy Qt plugins
-    add_custom_command(
-      TARGET ${TARGET_NAME}
-      POST_BUILD
-      COMMAND ${MACDEPLOYQT_COMMAND} ${CMAKE_CURRENT_BINARY_DIR}/\${CONFIGURATION}/${APP_NAME}.app -verbose 0
-    )
+#  elseif (DEFINED BUILD_BUNDLE AND BUILD_BUNDLE AND APPLE)
+#    find_program(MACDEPLOYQT_COMMAND macdeployqt PATHS ${QT_DIR}/bin NO_DEFAULT_PATH)
+#    
+#    if (NOT MACDEPLOYQT_COMMAND)
+#      message(FATAL_ERROR "Could not find macdeployqt at ${QT_DIR}/bin. macdeployqt is required.")
+#    endif ()
+#  
+#    if (NOT APP_NAME)
+#        set(APP_NAME TARGET_NAME)
+#    endif ()
+#    # add a post-build command to call macdeployqt to copy Qt plugins
+#    add_custom_command(
+#      TARGET ${TARGET_NAME}
+#      POST_BUILD
+#      COMMAND ${MACDEPLOYQT_COMMAND} ${CMAKE_CURRENT_BINARY_DIR}/\${CONFIGURATION}/${APP_NAME}.app -verbose 0
+#    )
   endif ()
 endmacro()
