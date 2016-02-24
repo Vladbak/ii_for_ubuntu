@@ -18,6 +18,8 @@ macro(manually_install_ssl_eay)
     # so we have to call find_package(OpenSSL) here even though this target may not specifically need it
     find_package(OpenSSL REQUIRED)
 
+    message("OPENSSL_DLL_PATH " ${OPENSSL_DLL_PATH})
+
     install(
       FILES "${OPENSSL_DLL_PATH}/ssleay32.dll" "${OPENSSL_DLL_PATH}/libeay32.dll"
       DESTINATION ${TARGET_INSTALL_DIR}
