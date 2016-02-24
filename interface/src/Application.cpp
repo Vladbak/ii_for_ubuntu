@@ -1211,7 +1211,8 @@ void Application::initializeUi() {
     // OffscreenUi is a subclass of OffscreenQmlSurface specifically designed to
     // support the window management and scripting proxies for VR use
     offscreenUi->createDesktop(QString("hifi/Desktop.qml"));
-    
+    connect(offscreenUi.data(), &OffscreenUi::showDesktop, this, &Application::showDesktop);
+
     // FIXME either expose so that dialogs can set this themselves or
     // do better detection in the offscreen UI of what has focus
     offscreenUi->setNavigationFocused(false);
@@ -1271,6 +1272,8 @@ void Application::initializeUi() {
     rootContext->setContextProperty("Scene", DependencyManager::get<SceneScriptingInterface>().data());
     rootContext->setContextProperty("Render", _renderEngine->getConfiguration().get());
     rootContext->setContextProperty("Reticle", _compositor.getReticleInterface());
+
+    rootContext->setContextProperty("ApplicationCompositor", &_compositor);
 
     _glWidget->installEventFilter(offscreenUi.data());
     offscreenUi->setMouseTranslator([=](const QPointF& pt) {
@@ -3787,8 +3790,9 @@ void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool se
     // The pending changes collecting the changes here
     render::PendingChanges pendingChanges;
 
+    // FIXME: Move this out of here!, Background / skybox should be driven by the enityt content just like the other entities
     // Background rendering decision
-    if (BackgroundRenderData::_item == 0) {
+    if (!render::Item::isValidID(BackgroundRenderData::_item)) {
         auto backgroundRenderData = make_shared<BackgroundRenderData>();
         auto backgroundRenderPayload = make_shared<BackgroundRenderData::Payload>(backgroundRenderData);
         BackgroundRenderData::_item = _main3DScene->allocateID();
@@ -3813,8 +3817,9 @@ void Application::displaySide(RenderArgs* renderArgs, Camera& theCamera, bool se
         }
     }
 
+    // FIXME: Move this out of here!, WorldBox should be driven by the entity content just like the other entities
     // Make sure the WorldBox is in the scene
-    if (WorldBoxRenderData::_item == 0) {
+    if (!render::Item::isValidID(WorldBoxRenderData::_item)) {
         auto worldBoxRenderData = make_shared<WorldBoxRenderData>();
         auto worldBoxRenderPayload = make_shared<WorldBoxRenderData::Payload>(worldBoxRenderData);
 
@@ -3921,16 +3926,8 @@ void Application::resetSensors(bool andReload) {
     DependencyManager::get<Faceshift>()->reset();
     DependencyManager::get<DdeFaceTracker>()->reset();
     DependencyManager::get<EyeTracker>()->reset();
-
     getActiveDisplayPlugin()->resetSensors();
-
-    QScreen* currentScreen = _window->windowHandle()->screen();
-    QWindow* mainWindow = _window->windowHandle();
-    QPoint windowCenter = mainWindow->geometry().center();
-    _glWidget->cursor().setPos(currentScreen, windowCenter);
-
     getMyAvatar()->reset(andReload);
-
     QMetaObject::invokeMethod(DependencyManager::get<AudioClient>().data(), "reset", Qt::QueuedConnection);
 }
 
@@ -5059,27 +5056,11 @@ void Application::setPalmData(Hand* hand, const controller::Pose& pose, float de
         // controller pose is in Avatar frame.
         glm::vec3 position = pose.getTranslation();
         glm::quat rotation = pose.getRotation();
+        glm::vec3 rawVelocity = pose.getVelocity();
+        glm::vec3 angularVelocity = pose.getAngularVelocity();
 
-        //  Compute current velocity from position change
-        glm::vec3 rawVelocity;
-        if (deltaTime > 0.0f) {
-            rawVelocity = (position - palm.getRawPosition()) / deltaTime;
-        } else {
-            rawVelocity = glm::vec3(0.0f);
-        }
-        palm.setRawVelocity(rawVelocity);   //  meters/sec
-
-        //  Angular Velocity of Palm
-        glm::quat deltaRotation = rotation * glm::inverse(palm.getRawRotation());
-        glm::vec3 angularVelocity(0.0f);
-        float rotationAngle = glm::angle(deltaRotation);
-        if ((rotationAngle > EPSILON) && (deltaTime > 0.0f)) {
-            angularVelocity = glm::normalize(glm::axis(deltaRotation));
-            angularVelocity *= (rotationAngle / deltaTime);
-            palm.setRawAngularVelocity(angularVelocity);
-        } else {
-            palm.setRawAngularVelocity(glm::vec3(0.0f));
-        }
+        palm.setRawVelocity(rawVelocity);
+        palm.setRawAngularVelocity(angularVelocity);
 
         if (controller::InputDevice::getLowVelocityFilter()) {
             //  Use a velocity sensitive filter to damp small motions and preserve large ones with
@@ -5149,5 +5130,11 @@ void Application::readArgumentsFromLocalSocket() {
     // If we received a message, try to open it as a URL
     if (message.length() > 0) {
         qApp->openUrl(QString::fromUtf8(message));
+    }
+}
+
+void Application::showDesktop() {
+    if (!_overlayConductor.getEnabled()) {
+        _overlayConductor.setEnabled(true);
     }
 }
