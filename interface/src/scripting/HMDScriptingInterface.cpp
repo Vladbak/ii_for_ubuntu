@@ -13,7 +13,8 @@
 
 #include <QtScript/QScriptContext>
 
-#include "display-plugins/DisplayPlugin.h"
+#include <display-plugins/DisplayPlugin.h>
+#include <display-plugins/CompositorHelper.h>
 #include <avatar/AvatarManager.h>
 #include "Application.h"
 
@@ -90,4 +91,9 @@ glm::quat HMDScriptingInterface::getOrientation() const {
         return glm::normalize(glm::quat_cast(getWorldHMDMatrix()));
     }
     return glm::quat();
+}
+
+bool HMDScriptingInterface::isMounted() const{
+    auto displayPlugin = qApp->getActiveDisplayPlugin();
+    return (displayPlugin->isHmd() && displayPlugin->isDisplayVisible());
 }

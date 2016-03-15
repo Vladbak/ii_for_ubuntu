@@ -43,7 +43,7 @@ Model::Model(RigPointer rig, QObject* parent) :
     _rotation(),
     _scale(1.0f, 1.0f, 1.0f),
     _scaleToFit(false),
-    _scaleToFitDimensions(0.0f),
+    _scaleToFitDimensions(1.0f),
     _scaledToFit(false),
     _snapModelToRegistrationPoint(false),
     _snappedToRegistrationPoint(false),
@@ -909,6 +909,14 @@ void Model::setScaleToFit(bool scaleToFit, float largestDimension, bool forceRes
     }
 }
 
+glm::vec3 Model::getScaleToFitDimensions() const {
+    if (_scaleToFitDimensions.y == FAKE_DIMENSION_PLACEHOLDER &&
+        _scaleToFitDimensions.z == FAKE_DIMENSION_PLACEHOLDER) {
+        return glm::vec3(_scaleToFitDimensions.x);
+    }
+    return _scaleToFitDimensions;
+}
+
 void Model::scaleToFit() {
     // If our _scaleToFitDimensions.y/z are FAKE_DIMENSION_PLACEHOLDER then it means our
     // user asked to scale us in a fixed aspect ratio to a single largest dimension, but
@@ -1197,9 +1205,9 @@ void Model::segregateMeshGroups() {
             if (showingCollisionHull) {
                 if (!_collisionHullMaterial) {
                     _collisionHullMaterial = std::make_shared<model::Material>();
-                    _collisionHullMaterial->setDiffuse(glm::vec3(1.0f, 0.5f, 0.0f));
+                    _collisionHullMaterial->setAlbedo(glm::vec3(1.0f, 0.5f, 0.0f));
                     _collisionHullMaterial->setMetallic(0.02f);
-                    _collisionHullMaterial->setGloss(1.0f);
+                    _collisionHullMaterial->setRoughness(0.5f);
                 }
                 _renderItemsSet << std::make_shared<MeshPartPayload>(networkMesh._mesh, partIndex, _collisionHullMaterial, transform, offset);
             } else {

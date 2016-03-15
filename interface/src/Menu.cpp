@@ -22,6 +22,7 @@
 #include <UserActivityLogger.h>
 #include <VrMenu.h>
 #include <ScriptEngines.h>
+#include <MenuItemProperties.h>
 
 #include "Application.h"
 #include "AccountManager.h"
@@ -45,11 +46,8 @@
 
 #include "Menu.h"
 
-static const char* const MENU_PROPERTY_NAME = "com.highfidelity.Menu";
-
 Menu* Menu::getInstance() {
-    static Menu* instance = globalInstance<Menu>(MENU_PROPERTY_NAME);
-    return instance;
+    return static_cast<Menu*>(qApp->getWindow()->menuBar());
 }
 
 Menu::Menu() {
@@ -71,17 +69,9 @@ Menu::Menu() {
                 dialogsManager.data(), &DialogsManager::toggleLoginDialog);
     }
 
-//    // File > Update -- FIXME: needs implementation
-//    auto action = addActionToQMenuAndActionHash(fileMenu, "Update");
-//    action->setDisabled(true);
-
 
     // File > Help
     addActionToQMenuAndActionHash(fileMenu, MenuOption::Help, 0, qApp, SLOT(showHelp()));
-
-//    // File > Crash Reporter...-- FIXME: needs implementation
-//    auto crashReporterAction = addActionToQMenuAndActionHash(fileMenu, "Crash Reporter...");
-//    crashReporterAction->setDisabled(true);
 
     // File > About
     addActionToQMenuAndActionHash(fileMenu, MenuOption::AboutApp, 0, qApp, SLOT(aboutApp()), QAction::AboutRole);
@@ -263,19 +253,16 @@ Menu::Menu() {
         0, true, qApp, SLOT(rotationModeChanged()),
         UNSPECIFIED_POSITION, "Advanced");
 
+    // View > Overlays
+    addCheckableActionToQMenuAndActionHash(viewMenu, MenuOption::Overlays, 0, true,
+        qApp, SLOT(setOverlaysVisible(bool)));
 
     // Navigate menu ----------------------------------
     MenuWrapper* navigateMenu = addMenu("Navigate");
 
-    // Navigate > Home -- FIXME: needs implementation
-    auto homeAction = addActionToQMenuAndActionHash(navigateMenu, "Home");
-    homeAction->setDisabled(true);
-
+    // Navigate > Show Address Bar
     addActionToQMenuAndActionHash(navigateMenu, MenuOption::AddressBar, Qt::CTRL | Qt::Key_L,
         dialogsManager.data(), SLOT(toggleAddressBar()));
-
-    // Navigate > Directory -- FIXME: needs implementation
-    addActionToQMenuAndActionHash(navigateMenu, "Directory");
 
     // Navigate > Bookmark related menus -- Note: the Bookmark class adds its own submenus here.
     qApp->getBookmarks()->setupMenus(this, navigateMenu);
@@ -307,26 +294,19 @@ Menu::Menu() {
         DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/GeneralPreferencesDialog.qml"), "GeneralPreferencesDialog");
     });
 
-
-    // Settings > Avatar...-- FIXME: needs implementation
+    // Settings > Avatar...
     action = addActionToQMenuAndActionHash(settingsMenu, "Avatar...");
     connect(action, &QAction::triggered, [] {
         DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/AvatarPreferencesDialog.qml"), "AvatarPreferencesDialog");
     });
 
-    // Settings > Audio...-- FIXME: needs implementation
+    // Settings > Audio...
     action = addActionToQMenuAndActionHash(settingsMenu, "Audio...");
     connect(action, &QAction::triggered, [] {
         DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/AudioPreferencesDialog.qml"), "AudioPreferencesDialog");
     });
 
-    // Settings > Graphics...
-    action = addActionToQMenuAndActionHash(settingsMenu, "Graphics...");
-    connect(action, &QAction::triggered, [] {
-        DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/GraphicsPreferencesDialog.qml"), "GraphicsPreferencesDialog");
-    });
-
-    // Settings > LOD...-- FIXME: needs implementation
+    // Settings > LOD...
     action = addActionToQMenuAndActionHash(settingsMenu, "LOD...");
     connect(action, &QAction::triggered, [] {
         DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/LodPreferencesDialog.qml"), "LodPreferencesDialog");
@@ -353,28 +333,18 @@ Menu::Menu() {
     // Developer menu ----------------------------------
     MenuWrapper* developerMenu = addMenu("Developer", "Developer");
 
+    // Developer > Graphics...
+    action = addActionToQMenuAndActionHash(developerMenu, "Graphics...");
+    connect(action, &QAction::triggered, [] {
+        DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/GraphicsPreferencesDialog.qml"), "GraphicsPreferencesDialog");
+    });
+
     // Developer > Render >>>
     MenuWrapper* renderOptionsMenu = developerMenu->addMenu("Render");
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::WorldAxes);
     /* UTII
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::Stars, 0, true);
     */
-    // Developer > Render > Ambient Light
-    MenuWrapper* ambientLightMenu = renderOptionsMenu->addMenu(MenuOption::RenderAmbientLight);
-    QActionGroup* ambientLightGroup = new QActionGroup(ambientLightMenu);
-    ambientLightGroup->setExclusive(true);
-    ambientLightGroup->addAction(addCheckableActionToQMenuAndActionHash(ambientLightMenu, MenuOption::RenderAmbientLightGlobal, 0, true));
-    ambientLightGroup->addAction(addCheckableActionToQMenuAndActionHash(ambientLightMenu, MenuOption::RenderAmbientLight0, 0, false));
-    ambientLightGroup->addAction(addCheckableActionToQMenuAndActionHash(ambientLightMenu, MenuOption::RenderAmbientLight1, 0, false));
-    ambientLightGroup->addAction(addCheckableActionToQMenuAndActionHash(ambientLightMenu, MenuOption::RenderAmbientLight2, 0, false));
-    ambientLightGroup->addAction(addCheckableActionToQMenuAndActionHash(ambientLightMenu, MenuOption::RenderAmbientLight3, 0, false));
-    ambientLightGroup->addAction(addCheckableActionToQMenuAndActionHash(ambientLightMenu, MenuOption::RenderAmbientLight4, 0, false));
-    ambientLightGroup->addAction(addCheckableActionToQMenuAndActionHash(ambientLightMenu, MenuOption::RenderAmbientLight5, 0, false));
-    ambientLightGroup->addAction(addCheckableActionToQMenuAndActionHash(ambientLightMenu, MenuOption::RenderAmbientLight6, 0, false));
-    ambientLightGroup->addAction(addCheckableActionToQMenuAndActionHash(ambientLightMenu, MenuOption::RenderAmbientLight7, 0, false));
-    ambientLightGroup->addAction(addCheckableActionToQMenuAndActionHash(ambientLightMenu, MenuOption::RenderAmbientLight8, 0, false));
-    ambientLightGroup->addAction(addCheckableActionToQMenuAndActionHash(ambientLightMenu, MenuOption::RenderAmbientLight9, 0, false));
-
     // Developer > Render > Throttle FPS If Not Focus
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::ThrottleFPSIfNotFocus, 0, true);
 
@@ -503,6 +473,8 @@ Menu::Menu() {
         avatar, SLOT(setUseAnimPreAndPostRotations(bool)));
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::EnableInverseKinematics, 0, true,
         avatar, SLOT(setEnableInverseKinematics(bool)));
+    addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::RenderSensorToWorldMatrix, 0, false,
+        avatar, SLOT(setEnableDebugDrawSensorToWorldMatrix(bool)));
 
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::KeyboardMotorControl,
         Qt::CTRL | Qt::SHIFT | Qt::Key_K, true, avatar, SLOT(updateMotionBehaviorFromMenu()),
@@ -518,7 +490,8 @@ Menu::Menu() {
 
     // Developer > Hands >>>
     MenuWrapper* handOptionsMenu = developerMenu->addMenu("Hands");
-    addCheckableActionToQMenuAndActionHash(handOptionsMenu, MenuOption::DisplayHandTargets, 0, false);
+    addCheckableActionToQMenuAndActionHash(handOptionsMenu, MenuOption::DisplayHandTargets, 0, false,
+        avatar, SLOT(setEnableDebugDrawHandControllers(bool)));
     addCheckableActionToQMenuAndActionHash(handOptionsMenu, MenuOption::LowVelocityFilter, 0, true,
         qApp, SLOT(setLowVelocityFilter(bool)));
 
@@ -622,6 +595,8 @@ Menu::Menu() {
     addCheckableActionToQMenuAndActionHash(developerMenu, MenuOption::DisplayCrashOptions, 0, true);
     // Developer > Crash Application
     addActionToQMenuAndActionHash(developerMenu, MenuOption::CrashInterface, 0, qApp, SLOT(crashApplication()));
+    // Developer > Deadlock Application
+    addActionToQMenuAndActionHash(developerMenu, MenuOption::DeadlockInterface, 0, qApp, SLOT(deadlockApplication()));
 
     // Developer > Log...
     addActionToQMenuAndActionHash(developerMenu, MenuOption::Log, Qt::CTRL | Qt::SHIFT | Qt::Key_L,
@@ -656,491 +631,6 @@ Menu::Menu() {
     addCheckableActionToQMenuAndActionHash(avatarMenu, MenuOption::NamesAboveHeads, 0, true, 
                 NULL, NULL, UNSPECIFIED_POSITION, "Advanced");
 #endif
-}
-
-void Menu::toggleAdvancedMenus() {
-    setGroupingIsVisible("Advanced", !getGroupingIsVisible("Advanced"));
-}
-
-void Menu::toggleDeveloperMenus() {
-    setGroupingIsVisible("Developer", !getGroupingIsVisible("Developer"));
-}
-
-void Menu::loadSettings() {
-    scanMenuBar(&Menu::loadAction);
-}
-
-void Menu::saveSettings() {
-    scanMenuBar(&Menu::saveAction);
-}
-
-void Menu::loadAction(Settings& settings, QAction& action) {
-    if (action.isChecked() != settings.value(action.text(), action.isChecked()).toBool()) {
-        action.trigger();
-    }
-}
-
-void Menu::saveAction(Settings& settings, QAction& action) {
-    settings.setValue(action.text(),  action.isChecked());
-}
-
-void Menu::scanMenuBar(settingsAction modifySetting) {
-    Settings settings;
-    foreach (QMenu* menu, findChildren<QMenu*>()) {
-        scanMenu(*menu, modifySetting, settings);
-    }
-}
-
-void Menu::scanMenu(QMenu& menu, settingsAction modifySetting, Settings& settings) {
-    settings.beginGroup(menu.title());
-    foreach (QAction* action, menu.actions()) {
-        if (action->menu()) {
-            scanMenu(*action->menu(), modifySetting, settings);
-        } else if (action->isCheckable()) {
-            modifySetting(settings, *action);
-        }
-    }
-    settings.endGroup();
-}
-
-void Menu::addDisabledActionAndSeparator(MenuWrapper* destinationMenu, const QString& actionName, 
-        int menuItemLocation, const QString& grouping, ItemAccessRoles accessRoles) {
-    QAction* actionBefore = NULL;
-    QAction* separator;
-    QAction* separatorText;
-
-    if (menuItemLocation >= 0 && destinationMenu->actions().size() > menuItemLocation) {
-        actionBefore = destinationMenu->actions()[menuItemLocation];
-    }
-    if (actionBefore) {
-        separator = new QAction("",destinationMenu);
-        destinationMenu->insertAction(actionBefore, separator);
-        separator->setSeparator(true);
-
-        separatorText = new QAction(actionName,destinationMenu);
-        separatorText->setEnabled(false);
-        destinationMenu->insertAction(actionBefore, separatorText);
-
-    } else {
-        separator = destinationMenu->addSeparator();
-        separatorText = destinationMenu->addAction(actionName);
-        separatorText->setEnabled(false);
-    }
-
-    if ((accessRoles & RankAndFile) == RankAndFile) {
-        _accessRoleActions[RankAndFile] << separator;
-        _accessRoleActions[RankAndFile] << separatorText;
-    }
-    if ((accessRoles & Trainers) == Trainers) {
-        _accessRoleActions[Trainers] << separator;
-        _accessRoleActions[Trainers] << separatorText;
-    }
-    if ((accessRoles & THERankAndFile) == THERankAndFile) {
-        _accessRoleActions[THERankAndFile] << separator;
-        _accessRoleActions[THERankAndFile] << separatorText;
-    }
-    if ((accessRoles & THETrainers) == THETrainers) {
-        _accessRoleActions[THETrainers] << separator;
-        _accessRoleActions[THETrainers] << separatorText;
-    }
-
-    if (isValidGrouping(grouping)) {
-        _groupingActions[grouping] << separator;
-        _groupingActions[grouping] << separatorText;
-    }
-    bool isVisible = getGroupingIsVisible(grouping) && getItemRoleIsVisible(accessRoles);
-        separator->setVisible(isVisible);
-        separatorText->setVisible(isVisible);
-    }
-
-QAction* Menu::addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
-                                             const QString& actionName,
-                                             const QKeySequence& shortcut,
-                                             const QObject* receiver,
-                                             const char* member,
-                                             QAction::MenuRole role,
-                                             int menuItemLocation, 
-                                             const QString& grouping,
-                                             ItemAccessRoles accessRoles) {
-    QAction* action = NULL;
-    QAction* actionBefore = NULL;
-
-    if (menuItemLocation >= 0 && destinationMenu->actions().size() > menuItemLocation) {
-        actionBefore = destinationMenu->actions()[menuItemLocation];
-    }
-
-    if (!actionBefore) {
-        if (receiver && member) {
-            action = destinationMenu->addAction(actionName, receiver, member, shortcut);
-        } else {
-            action = destinationMenu->addAction(actionName);
-            action->setShortcut(shortcut);
-        }
-    } else {
-        action = new QAction(actionName, destinationMenu);
-        action->setShortcut(shortcut);
-        destinationMenu->insertAction(actionBefore, action);
-
-        if (receiver && member) {
-            connect(action, SIGNAL(triggered()), receiver, member);
-        }
-    }
-    action->setMenuRole(role);
-
-    _actionHash.insert(actionName, action);
-
-    if ((accessRoles & RankAndFile) == RankAndFile) {
-        _accessRoleActions[RankAndFile] << action;
-    }
-    if ((accessRoles & Trainers) == Trainers) {
-        _accessRoleActions[Trainers] << action;
-    }
-    if ((accessRoles & THERankAndFile) == THERankAndFile) {
-        _accessRoleActions[THERankAndFile] << action;
-    }
-    if ((accessRoles & THETrainers) == THETrainers) {
-        _accessRoleActions[THETrainers] << action;
-    }
-
-    if (isValidGrouping(grouping)) {
-        _groupingActions[grouping] << action;
-    }
-    action->setVisible(getGroupingIsVisible(grouping) && getItemRoleIsVisible(accessRoles));
-
-    return action;
-}
-
-QAction* Menu::addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
-                                             QAction* action,
-                                             const QString& actionName,
-                                             const QKeySequence& shortcut,
-                                             QAction::MenuRole role,
-                                             int menuItemLocation, 
-                                             const QString& grouping,
-                                             ItemAccessRoles accessRoles) {
-    QAction* actionBefore = NULL;
-
-    if (menuItemLocation >= 0 && destinationMenu->actions().size() > menuItemLocation) {
-        actionBefore = destinationMenu->actions()[menuItemLocation];
-    }
-
-    if (!actionName.isEmpty()) {
-        action->setText(actionName);
-    }
-
-    if (shortcut != 0) {
-        action->setShortcut(shortcut);
-    }
-
-    if (role != QAction::NoRole) {
-        action->setMenuRole(role);
-    }
-
-    if (!actionBefore) {
-        destinationMenu->addAction(action);
-    } else {
-        destinationMenu->insertAction(actionBefore, action);
-    }
-
-    _actionHash.insert(action->text(), action);
-
-    if ((accessRoles & RankAndFile) == RankAndFile) {
-        _accessRoleActions[RankAndFile] << action;
-    }
-    if ((accessRoles & Trainers) == Trainers) {
-        _accessRoleActions[Trainers] << action;
-    }
-    if ((accessRoles & THERankAndFile) == THERankAndFile) {
-        _accessRoleActions[THERankAndFile] << action;
-    }
-    if ((accessRoles & THETrainers) == THETrainers) {
-        _accessRoleActions[THETrainers] << action;
-    }
-
-    if (isValidGrouping(grouping)) {
-        _groupingActions[grouping] << action;
-    }
-
-    action->setVisible(getGroupingIsVisible(grouping) && getItemRoleIsVisible(accessRoles));
-
-    return action;
-}
-
-QAction* Menu::addCheckableActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
-                                                      const QString& actionName,
-                                                      const QKeySequence& shortcut,
-                                                      const bool checked,
-                                                      const QObject* receiver,
-                                                      const char* member,
-                                                      int menuItemLocation, 
-                                                      const QString& grouping,
-                                                      ItemAccessRoles accessRoles) {
-
-    QAction* action = addActionToQMenuAndActionHash(destinationMenu, actionName, shortcut, receiver, member,
-                                                        QAction::NoRole, menuItemLocation);
-    action->setCheckable(true);
-    action->setChecked(checked);
-
-    if ((accessRoles & RankAndFile) == RankAndFile) {
-        _accessRoleActions[RankAndFile] << action;
-    }
-    if ((accessRoles & Trainers) == Trainers) {
-        _accessRoleActions[Trainers] << action;
-    }
-    if ((accessRoles & THERankAndFile) == THERankAndFile) {
-        _accessRoleActions[THERankAndFile] << action;
-    }
-    if ((accessRoles & THETrainers) == THETrainers) {
-        _accessRoleActions[THETrainers] << action;
-    }
-
-    if (isValidGrouping(grouping)) {
-        _groupingActions[grouping] << action;
-    }
-
-    action->setVisible(getGroupingIsVisible(grouping) && getItemRoleIsVisible(accessRoles));
-
-    return action;
-}
-
-void Menu::removeAction(MenuWrapper* menu, const QString& actionName) {
-    auto action = _actionHash.value(actionName);
-    menu->removeAction(action);
-    _actionHash.remove(actionName);
-    for (auto& grouping : _groupingActions) {
-        grouping.remove(action);
-    }
-}
-
-void Menu::setIsOptionChecked(const QString& menuOption, bool isChecked) {
-    if (thread() != QThread::currentThread()) {
-        QMetaObject::invokeMethod(Menu::getInstance(), "setIsOptionChecked", Qt::BlockingQueuedConnection,
-                    Q_ARG(const QString&, menuOption),
-                    Q_ARG(bool, isChecked));
-        return;
-    }
-    QAction* menu = _actionHash.value(menuOption);
-    if (menu) {
-        menu->setChecked(isChecked);
-    }
-}
-
-bool Menu::isOptionChecked(const QString& menuOption) const {
-    const QAction* menu = _actionHash.value(menuOption);
-    if (menu) {
-        return menu->isChecked();
-    }
-    return false;
-}
-
-void Menu::triggerOption(const QString& menuOption) {
-    QAction* action = _actionHash.value(menuOption);
-    if (action) {
-        action->trigger();
-    } else {
-        qCDebug(interfaceapp) << "NULL Action for menuOption '" << menuOption << "'";
-    }
-}
-
-QAction* Menu::getActionForOption(const QString& menuOption) {
-    return _actionHash.value(menuOption);
-}
-
-QAction* Menu::getActionFromName(const QString& menuName, MenuWrapper* menu) {
-    QList<QAction*> menuActions;
-    if (menu) {
-        menuActions = menu->actions();
-    } else {
-        menuActions = actions();
-    }
-
-    foreach (QAction* menuAction, menuActions) {
-        QString actionText = menuAction->text();
-        if (menuName == menuAction->text()) {
-            return menuAction;
-        }
-    }
-    return NULL;
-}
-
-MenuWrapper* Menu::getSubMenuFromName(const QString& menuName, MenuWrapper* menu) {
-    QAction* action = getActionFromName(menuName, menu);
-    if (action) {
-        return MenuWrapper::fromMenu(action->menu());
-    }
-    return NULL;
-}
-
-MenuWrapper* Menu::getMenuParent(const QString& menuName, QString& finalMenuPart) {
-    QStringList menuTree = menuName.split(">");
-    MenuWrapper* parent = NULL;
-    MenuWrapper* menu = NULL;
-    foreach (QString menuTreePart, menuTree) {
-        parent = menu;
-        finalMenuPart = menuTreePart.trimmed();
-        menu = getSubMenuFromName(finalMenuPart, parent);
-        if (!menu) {
-            break;
-        }
-    }
-    return parent;
-}
-
-MenuWrapper* Menu::getMenu(const QString& menuName) {
-    QStringList menuTree = menuName.split(">");
-    MenuWrapper* parent = NULL;
-    MenuWrapper* menu = NULL;
-    int item = 0;
-    foreach (QString menuTreePart, menuTree) {
-        menu = getSubMenuFromName(menuTreePart.trimmed(), parent);
-        if (!menu) {
-            break;
-        }
-        parent = menu;
-        item++;
-    }
-    return menu;
-}
-
-QAction* Menu::getMenuAction(const QString& menuName) {
-    QStringList menuTree = menuName.split(">");
-    MenuWrapper* parent = NULL;
-    QAction* action = NULL;
-    foreach (QString menuTreePart, menuTree) {
-        action = getActionFromName(menuTreePart.trimmed(), parent);
-        if (!action) {
-            break;
-        }
-        parent = MenuWrapper::fromMenu(action->menu());
-    }
-    return action;
-}
-
-int Menu::findPositionOfMenuItem(MenuWrapper* menu, const QString& searchMenuItem) {
-    int position = 0;
-    foreach(QAction* action, menu->actions()) {
-        if (action->text() == searchMenuItem) {
-            return position;
-        }
-        position++;
-    }
-    return UNSPECIFIED_POSITION; // not found
-}
-
-int Menu::positionBeforeSeparatorIfNeeded(MenuWrapper* menu, int requestedPosition) {
-    QList<QAction*> menuActions = menu->actions();
-    if (requestedPosition > 1 && requestedPosition < menuActions.size()) {
-        QAction* beforeRequested = menuActions[requestedPosition - 1];
-        if (beforeRequested->isSeparator()) {
-            requestedPosition--;
-        }
-    }
-    return requestedPosition;
-}
-
-bool Menu::_isSomeSubmenuShown = false;
-
-MenuWrapper* Menu::addMenu(const QString& menuName, const QString& grouping, ItemAccessRoles accessRoles) {
-    QStringList menuTree = menuName.split(">");
-    MenuWrapper* addTo = NULL;
-    MenuWrapper* menu = NULL;
-    foreach (QString menuTreePart, menuTree) {
-        menu = getSubMenuFromName(menuTreePart.trimmed(), addTo);
-        if (!menu) {
-            if (!addTo) {
-                menu = new MenuWrapper(QMenuBar::addMenu(menuTreePart.trimmed()));
-            } else {
-                menu = addTo->addMenu(menuTreePart.trimmed());
-            }
-        }
-        addTo = menu;
-    }
-
-        auto action = getMenuAction(menuName);
-        if (action) {
-        if ((accessRoles & RankAndFile) == RankAndFile) {
-            _accessRoleActions[RankAndFile] << action;
-        }
-        if ((accessRoles & Trainers) == Trainers) {
-            _accessRoleActions[Trainers] << action;
-        }
-        if ((accessRoles & THERankAndFile) == THERankAndFile) {
-            _accessRoleActions[THERankAndFile] << action;
-        }
-        if ((accessRoles & THETrainers) == THETrainers) {
-            _accessRoleActions[THETrainers] << action;
-        }
-        if (isValidGrouping(grouping)) {
-            _groupingActions[grouping] << action;
-        }
-        action->setVisible(getGroupingIsVisible(grouping) && getItemRoleIsVisible(accessRoles));
-    }
-
-    QMenuBar::repaint();
-
-    // hook our show/hide for popup menus, so we can keep track of whether or not one
-    // of our submenus is currently showing.
-    connect(menu->_realMenu, &QMenu::aboutToShow, []() { _isSomeSubmenuShown = true; });
-    connect(menu->_realMenu, &QMenu::aboutToHide, []() { _isSomeSubmenuShown = false; });
-
-    return menu;
-}
-
-void Menu::removeMenu(const QString& menuName) {
-    QAction* action = getMenuAction(menuName);
-
-    // only proceed if the menu actually exists
-    if (action) {
-        QString finalMenuPart;
-        MenuWrapper* parent = getMenuParent(menuName, finalMenuPart);
-        if (parent) {
-            parent->removeAction(action);
-        } else {
-            QMenuBar::removeAction(action);
-        }
-
-        QMenuBar::repaint();
-    }
-}
-
-bool Menu::menuExists(const QString& menuName) {
-    QAction* action = getMenuAction(menuName);
-
-    // only proceed if the menu actually exists
-    if (action) {
-        return true;
-    }
-    return false;
-}
-
-void Menu::addSeparator(const QString& menuName, const QString& separatorName, const QString& grouping) {
-    MenuWrapper* menuObj = getMenu(menuName);
-    if (menuObj) {
-        addDisabledActionAndSeparator(menuObj, separatorName);
-    }
-}
-
-void Menu::removeSeparator(const QString& menuName, const QString& separatorName) {
-    MenuWrapper* menu = getMenu(menuName);
-    bool separatorRemoved = false;
-    if (menu) {
-        int textAt = findPositionOfMenuItem(menu, separatorName);
-        QList<QAction*> menuActions = menu->actions();
-        QAction* separatorText = menuActions[textAt];
-        if (textAt > 0 && textAt < menuActions.size()) {
-            QAction* separatorLine = menuActions[textAt - 1];
-            if (separatorLine) {
-                if (separatorLine->isSeparator()) {
-                    menu->removeAction(separatorText);
-                    menu->removeAction(separatorLine);
-                    separatorRemoved = true;
-                }
-            }
-        }
-    }
-    if (separatorRemoved) {
-        QMenuBar::repaint();
-    }
 }
 
 void Menu::addMenuItem(const MenuItemProperties& properties) {
@@ -1185,136 +675,3 @@ void Menu::addMenuItem(const MenuItemProperties& properties) {
         QMenuBar::repaint();
     }
 }
-
-void Menu::removeMenuItem(const QString& menu, const QString& menuitem) {
-    MenuWrapper* menuObj = getMenu(menu);
-    if (menuObj) {
-        removeAction(menuObj, menuitem);
-        QMenuBar::repaint();
-    }
-}
-
-bool Menu::menuItemExists(const QString& menu, const QString& menuitem) {
-    QAction* menuItemAction = _actionHash.value(menuitem);
-    if (menuItemAction) {
-        return (getMenu(menu) != NULL);
-    }
-    return false;
-}
-
-bool Menu::getGroupingIsVisible(const QString& grouping) {
-    if (grouping.isEmpty() || grouping.isNull()) {
-        return true;
-    }
-    if (_groupingVisible.contains(grouping)) {
-        return _groupingVisible[grouping];
-    }
-    return false;
-}
-
-bool Menu::getItemRoleIsVisible(ItemAccessRoles roles) {
-    if (_currentRole == Admin) {
-        return true;
-    }
-    if ((roles & _currentRole) == _currentRole) {
-        return true;
-    }
-    return false;
-}
-
-void Menu::setGroupingIsVisible(const QString& grouping, bool isVisible) {
-    // NOTE: Default grouping always visible
-    if (grouping.isEmpty() || grouping.isNull()) {
-        return;
-    }
-    _groupingVisible[grouping] = isVisible;
-
-    for (auto action: _groupingActions[grouping]) {
-        action->setVisible(isVisible && (_currentRole == ItemAccessRoles::Admin || _accessRoleActions[_currentRole].contains(action)));
-    }
-
-    QMenuBar::repaint();
-}
-
-void Menu::addActionGroup(const QString& groupName, const QStringList& actionList, const QString& selected) {
-    auto menu = addMenu(groupName);
-    
-    QActionGroup* actionGroup = new QActionGroup(menu);
-    actionGroup->setExclusive(true);
-    
-    auto menuScriptingInterface = MenuScriptingInterface::getInstance();
-    for (auto action : actionList) {
-        auto item = addCheckableActionToQMenuAndActionHash(menu, action, 0, action == selected,
-                                                           menuScriptingInterface,
-                                                           SLOT(menuItemTriggered()));
-        actionGroup->addAction(item);
-    }
-    
-    QMenuBar::repaint();
-}
-
-void Menu::removeActionGroup(const QString& groupName) {
-    removeMenu(groupName);
-}
-
-MenuWrapper::MenuWrapper(QMenu* menu) : _realMenu(menu) {
-    VrMenu::executeOrQueue([=](VrMenu* vrMenu) {
-        vrMenu->addMenu(menu);
-    });
-    _backMap[menu] = this;
-}
-
-QList<QAction*> MenuWrapper::actions() {
-    return _realMenu->actions();
-}
-
-MenuWrapper* MenuWrapper::addMenu(const QString& menuName) {
-    return new MenuWrapper(_realMenu->addMenu(menuName));
-}
-
-void MenuWrapper::setEnabled(bool enabled) {
-    _realMenu->setEnabled(enabled);
-}
-
-QAction* MenuWrapper::addSeparator() {
-    return _realMenu->addSeparator();
-}
-
-void MenuWrapper::addAction(QAction* action) {
-    _realMenu->addAction(action);
-    VrMenu::executeOrQueue([=](VrMenu* vrMenu) {
-        vrMenu->addAction(_realMenu, action);
-    });
-}
-
-QAction* MenuWrapper::addAction(const QString& menuName) {
-    QAction* action = _realMenu->addAction(menuName);
-    VrMenu::executeOrQueue([=](VrMenu* vrMenu) {
-        vrMenu->addAction(_realMenu, action);
-    });
-    return action;
-}
-
-QAction* MenuWrapper::addAction(const QString& menuName, const QObject* receiver, const char* member, const QKeySequence& shortcut) {
-    QAction* action = _realMenu->addAction(menuName, receiver, member, shortcut);
-    VrMenu::executeOrQueue([=](VrMenu* vrMenu) {
-        vrMenu->addAction(_realMenu, action);
-    });
-    return action;
-}
-
-void MenuWrapper::removeAction(QAction* action) {
-    _realMenu->removeAction(action);
-    VrMenu::executeOrQueue([=](VrMenu* vrMenu) {
-        vrMenu->removeAction(action);
-    });
-}
-
-void MenuWrapper::insertAction(QAction* before, QAction* action) {
-    _realMenu->insertAction(before, action);
-    VrMenu::executeOrQueue([=](VrMenu* vrMenu) {
-        vrMenu->insertAction(before, action);
-    });
-}
-
-QHash<QMenu*, MenuWrapper*> MenuWrapper::_backMap;

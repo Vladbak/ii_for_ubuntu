@@ -22,7 +22,6 @@
 
 #include <render/Scene.h>
 
-#include "Hand.h"
 #include "Head.h"
 #include "SkeletonModel.h"
 #include "world.h"
@@ -91,7 +90,7 @@ public:
     float getUniformScale() const { return getScale().y; }
     const Head* getHead() const { return static_cast<const Head*>(_headData); }
     Head* getHead() { return static_cast<Head*>(_headData); }
-    Hand* getHand() { return static_cast<Hand*>(_handData); }
+
     glm::quat getWorldAlignedOrientation() const;
 
     AABox getBounds() const;
@@ -193,6 +192,7 @@ protected:
     glm::vec3 _skeletonOffset;
     std::vector<std::shared_ptr<Model>> _attachmentModels;
     std::vector<std::shared_ptr<Model>> _attachmentsToRemove;
+    std::vector<std::shared_ptr<Model>> _attachmentsToDelete;
 
     float _bodyYawDelta;  // degrees/sec
 
@@ -231,8 +231,8 @@ protected:
     float getPelvisFloatingHeight() const;
     glm::vec3 getDisplayNamePosition() const;
 
-    Transform calculateDisplayNameTransform(const ViewFrustum& frustum, const glm::vec3& textPosition) const;
-    void renderDisplayName(gpu::Batch& batch, const ViewFrustum& frustum, const glm::vec3& textPosition) const;
+    Transform calculateDisplayNameTransform(const ViewFrustum& view, const glm::vec3& textPosition) const;
+    void renderDisplayName(gpu::Batch& batch, const ViewFrustum& view, const glm::vec3& textPosition) const;
     virtual void renderBody(RenderArgs* renderArgs, ViewFrustum* renderFrustum, float glowLevel = 0.0f);
     virtual bool shouldRenderHead(const RenderArgs* renderArgs) const;
     virtual void fixupModelsInScene();

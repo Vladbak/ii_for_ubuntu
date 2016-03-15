@@ -1,3 +1,4 @@
+"use strict";
 //  handControllerGrab.js
 //
 //  Created by Eric Levin on  9/2/15
@@ -73,9 +74,7 @@ var PICK_MAX_DISTANCE = 500; // max length of pick-ray
 
 var GRAB_RADIUS = 0.06; // if the ray misses but an object is this close, it will still be selected
 var NEAR_GRABBING_ACTION_TIMEFRAME = 0.05; // how quickly objects move to their new position
-var NEAR_GRABBING_VELOCITY_SMOOTH_RATIO = 1.0; // adjust time-averaging of held object's velocity.  1.0 to disable.
 var NEAR_PICK_MAX_DISTANCE = 0.3; // max length of pick-ray for close grabbing to be selected
-var RELEASE_VELOCITY_MULTIPLIER = 1.5; // affects throwing things
 var PICK_BACKOFF_DISTANCE = 0.2; // helps when hand is intersecting the grabble object
 var NEAR_GRABBING_KINEMATIC = true; // force objects to be kinematic when near-grabbed
 var SHOW_GRAB_SPHERE = false; // draw a green sphere to show the grab search position and size
@@ -172,6 +171,9 @@ var STATE_WAITING_FOR_BUMPER_RELEASE = 15;
 // the possible group names are:  static, dynamic, kinematic, myAvatar, otherAvatar
 var COLLIDES_WITH_WHILE_GRABBED = "dynamic,otherAvatar";
 var COLLIDES_WITH_WHILE_MULTI_GRABBED = "dynamic";
+
+var HEART_BEAT_INTERVAL = 5 * MSECS_PER_SEC;
+var HEART_BEAT_TIMEOUT = 15 * MSECS_PER_SEC;
 
 function stateToName(state) {
     switch (state) {
@@ -800,6 +802,8 @@ function MyController(hand) {
         this.isInitialGrab = false;
         this.doubleParentGrab = false;
 
+        this.checkForStrayChildren();
+
         if (this.state == STATE_SEARCHING ? this.triggerSmoothedReleased() : this.bumperReleased()) {
             this.setState(STATE_RELEASE);
             return;
@@ -1045,9 +1049,14 @@ function MyController(hand) {
     }
 
     this.distanceHolding = function() {
-        var handControllerPosition = (this.hand === RIGHT_HAND) ? MyAvatar.rightHandPosition : MyAvatar.leftHandPosition;
-        var controllerHandInput = (this.hand === RIGHT_HAND) ? Controller.Standard.RightHand : Controller.Standard.LeftHand;
-        var handRotation = Quat.multiply(MyAvatar.orientation, Controller.getPoseValue(controllerHandInput).rotation);
+
+        // controller pose is in avatar frame
+        var avatarControllerPose = Controller.getPoseValue((this.hand === RIGHT_HAND) ? Controller.Standard.RightHand : Controller.Standard.LeftHand);
+
+        // transform it into world frame
+        var controllerPosition = Vec3.sum(MyAvatar.position, Vec3.multiplyQbyV(MyAvatar.orientation, avatarControllerPose.translation));
+        var controllerRotation = Quat.multiply(MyAvatar.orientation, avatarControllerPose.rotation);
+
         var grabbedProperties = Entities.getEntityProperties(this.grabbedEntity, GRABBABLE_PROPERTIES);
         var now = Date.now();
 
@@ -1055,12 +1064,10 @@ function MyController(hand) {
         this.currentObjectPosition = grabbedProperties.position;
         this.currentObjectRotation = grabbedProperties.rotation;
         this.currentObjectTime = now;
-        this.handRelativePreviousPosition = Vec3.subtract(handControllerPosition, MyAvatar.position);
-        this.handPreviousRotation = handRotation;
         this.currentCameraOrientation = Camera.orientation;
 
         // compute a constant based on the initial conditions which we use below to exagerate hand motion onto the held object
-        this.radiusScalar = Math.log(Vec3.distance(this.currentObjectPosition, handControllerPosition) + 1.0);
+        this.radiusScalar = Math.log(Vec3.distance(this.currentObjectPosition, controllerPosition) + 1.0);
         if (this.radiusScalar < 1.0) {
             this.radiusScalar = 1.0;
         }
@@ -1090,10 +1097,10 @@ function MyController(hand) {
             this.callEntityMethodOnGrabbed("startDistanceGrab");
         }
 
-        this.currentAvatarPosition = MyAvatar.position;
-        this.currentAvatarOrientation = MyAvatar.orientation;
-
         this.turnOffVisualizations();
+
+        this.previousControllerPosition = controllerPosition;
+        this.previousControllerRotation = controllerRotation;
     };
 
     this.continueDistanceHolding = function() {
@@ -1103,10 +1110,15 @@ function MyController(hand) {
             return;
         }
 
-        var handPosition = this.getHandPosition();
-        var handControllerPosition = (this.hand === RIGHT_HAND) ? MyAvatar.rightHandPosition : MyAvatar.leftHandPosition;
-        var controllerHandInput = (this.hand === RIGHT_HAND) ? Controller.Standard.RightHand : Controller.Standard.LeftHand;
-        var handRotation = Quat.multiply(MyAvatar.orientation, Controller.getPoseValue(controllerHandInput).rotation);
+        this.heartBeat(this.grabbedEntity);
+
+        // controller pose is in avatar frame
+        var avatarControllerPose = Controller.getPoseValue((this.hand === RIGHT_HAND) ? Controller.Standard.RightHand : Controller.Standard.LeftHand);
+
+        // transform it into world frame
+        var controllerPosition = Vec3.sum(MyAvatar.position, Vec3.multiplyQbyV(MyAvatar.orientation, avatarControllerPose.translation));
+        var controllerRotation = Quat.multiply(MyAvatar.orientation, avatarControllerPose.rotation);
+
         var grabbedProperties = Entities.getEntityProperties(this.grabbedEntity, GRABBABLE_PROPERTIES);
         var grabbableData = getEntityCustomData(GRABBABLE_DATA_KEY, this.grabbedEntity, DEFAULT_GRABBABLE_DATA);
 
@@ -1119,66 +1131,27 @@ function MyController(hand) {
             return;
         }
 
+        var now = Date.now();
+        this.currentObjectTime = now;
 
         // the action was set up on a previous call.  update the targets.
-        var radius = Vec3.distance(this.currentObjectPosition, handControllerPosition) *
+        var radius = Vec3.distance(this.currentObjectPosition, controllerPosition) *
             this.radiusScalar * DISTANCE_HOLDING_RADIUS_FACTOR;
         if (radius < 1.0) {
             radius = 1.0;
         }
 
-        // how far did avatar move this timestep?
-        var currentPosition = MyAvatar.position;
-        var avatarDeltaPosition = Vec3.subtract(currentPosition, this.currentAvatarPosition);
-        this.currentAvatarPosition = currentPosition;
+        // scale delta controller hand movement by radius.
+        var handMoved = Vec3.multiply(Vec3.subtract(controllerPosition, this.previousControllerPosition), radius);
 
-        // How far did the avatar turn this timestep?
-        // Note:  The following code is too long because we need a Quat.quatBetween() function
-        // that returns the minimum quaternion between two quaternions.
-        var currentOrientation = MyAvatar.orientation;
-        if (Quat.dot(currentOrientation, this.currentAvatarOrientation) < 0.0) {
-            var negativeCurrentOrientation = {
-                x: -currentOrientation.x,
-                y: -currentOrientation.y,
-                z: -currentOrientation.z,
-                w: -currentOrientation.w
-            };
-            var avatarDeltaOrientation = Quat.multiply(negativeCurrentOrientation, Quat.inverse(this.currentAvatarOrientation));
-        } else {
-            var avatarDeltaOrientation = Quat.multiply(currentOrientation, Quat.inverse(this.currentAvatarOrientation));
-        }
-        var handToAvatar = Vec3.subtract(handControllerPosition, this.currentAvatarPosition);
-        var objectToAvatar = Vec3.subtract(this.currentObjectPosition, this.currentAvatarPosition);
-        var handMovementFromTurning = Vec3.subtract(Quat.multiply(avatarDeltaOrientation, handToAvatar), handToAvatar);
-        var objectMovementFromTurning = Vec3.subtract(Quat.multiply(avatarDeltaOrientation, objectToAvatar), objectToAvatar);
-        this.currentAvatarOrientation = currentOrientation;
+        // double delta controller rotation
+        var handChange = Quat.multiply(Quat.slerp(this.previousControllerRotation,
+                                                  controllerRotation,
+                                                  DISTANCE_HOLDING_ROTATION_EXAGGERATION_FACTOR),
+                                       Quat.inverse(this.previousControllerRotation));
 
-        // how far did hand move this timestep?
-        var handMoved = Vec3.subtract(handToAvatar, this.handRelativePreviousPosition);
-        this.handRelativePreviousPosition = handToAvatar;
-
-        // magnify the hand movement but not the change from avatar movement & rotation
-        handMoved = Vec3.subtract(handMoved, handMovementFromTurning);
-        var superHandMoved = Vec3.multiply(handMoved, radius);
-
-        // Move the object by the magnified amount and then by amount from avatar movement & rotation
-        var newObjectPosition = Vec3.sum(this.currentObjectPosition, superHandMoved);
-        newObjectPosition = Vec3.sum(newObjectPosition, avatarDeltaPosition);
-        newObjectPosition = Vec3.sum(newObjectPosition, objectMovementFromTurning);
-
-        var deltaPosition = Vec3.subtract(newObjectPosition, this.currentObjectPosition); // meters
-        var now = Date.now();
-        var deltaTime = (now - this.currentObjectTime) / MSEC_PER_SEC; // convert to seconds
-
-        this.currentObjectPosition = newObjectPosition;
-        this.currentObjectTime = now;
-
-        // this doubles hand rotation
-        var handChange = Quat.multiply(Quat.slerp(this.handPreviousRotation,
-                handRotation,
-                DISTANCE_HOLDING_ROTATION_EXAGGERATION_FACTOR),
-            Quat.inverse(this.handPreviousRotation));
-        this.handPreviousRotation = handRotation;
+        // update the currentObject position and rotation.
+        this.currentObjectPosition = Vec3.sum(this.currentObjectPosition, handMoved);
         this.currentObjectRotation = Quat.multiply(handChange, this.currentObjectRotation);
 
         this.callEntityMethodOnGrabbed("continueDistantGrab");
@@ -1189,6 +1162,7 @@ function MyController(hand) {
 
         var handControllerData = getEntityCustomData('handControllerKey', this.grabbedEntity, defaultMoveWithHeadData);
 
+        var objectToAvatar = Vec3.subtract(this.currentObjectPosition, MyAvatar.position);
         if (handControllerData.disableMoveWithHead !== true) {
             // mix in head motion
             if (MOVE_WITH_HEAD) {
@@ -1228,6 +1202,7 @@ function MyController(hand) {
             }
         }
 
+        var handPosition = this.getHandPosition();
 
         //visualizations
         if (USE_ENTITY_LINES_FOR_MOVING === true) {
@@ -1259,6 +1234,9 @@ function MyController(hand) {
         } else {
             print("continueDistanceHolding -- updateAction failed");
         }
+
+        this.previousControllerPosition = controllerPosition;
+        this.previousControllerRotation = controllerRotation;
     };
 
     this.setupHoldAction = function() {
@@ -1438,7 +1416,16 @@ function MyController(hand) {
             return;
         }
 
+        this.heartBeat(this.grabbedEntity);
+
         var props = Entities.getEntityProperties(this.grabbedEntity, ["localPosition", "parentID", "position"]);
+        if (!props.position) {
+            // server may have reset, taking our equipped entity with it.  move back to "off" stte
+            this.setState(STATE_RELEASE);
+            this.callEntityMethodOnGrabbed("releaseGrab");
+            return;
+        }
+
         if (props.parentID == MyAvatar.sessionUUID &&
             Vec3.length(props.localPosition) > NEAR_PICK_MAX_DISTANCE * 2.0) {
             // for whatever reason, the held/equipped entity has been pulled away.  ungrab or unequip.
@@ -1644,7 +1631,7 @@ function MyController(hand) {
                     // this next line allowed both:
                     // (1) far-grab, pull to self, near grab, then throw
                     // (2) equip something physical and adjust it with a other-hand grab without the thing drifting
-                    (!this.isInitialGrab && grabData.refCount > 1)) {
+                    grabData.refCount > 1) {
                     noVelocity = true;
                 }
             }
@@ -1670,19 +1657,39 @@ function MyController(hand) {
         Entities.deleteEntity(this.pointLight);
     };
 
+    this.heartBeat = function(entityID) {
+        var now = Date.now();
+        if (now - this.lastHeartBeat > HEART_BEAT_INTERVAL) {
+            var data = getEntityCustomData(GRAB_USER_DATA_KEY, entityID, {});
+            data["heartBeat"] = now;
+            setEntityCustomData(GRAB_USER_DATA_KEY, entityID, data);
+            this.lastHeartBeat = now;
+        }
+    };
+
+    this.resetAbandonedGrab = function(entityID) {
+        print("cleaning up abandoned grab on " + entityID);
+        var data = getEntityCustomData(GRAB_USER_DATA_KEY, entityID, {});
+        data["refCount"] = 1;
+        setEntityCustomData(GRAB_USER_DATA_KEY, entityID, data);
+        this.deactivateEntity(entityID, false);
+    };
+
     this.activateEntity = function(entityID, grabbedProperties, wasLoaded) {
         var grabbableData = getEntityCustomData(GRABBABLE_DATA_KEY, entityID, DEFAULT_GRABBABLE_DATA);
         var data = getEntityCustomData(GRAB_USER_DATA_KEY, entityID, {});
-        data["activated"] = true;
-        data["avatarId"] = MyAvatar.sessionUUID;
+        var now = Date.now();
+
         if (wasLoaded) {
             data["refCount"] = 1;
-            data["avatarId"] = MyAvatar.sessionUUID;
         } else {
             data["refCount"] = data["refCount"] ? data["refCount"] + 1 : 1;
 
             // zero gravity and set ignoreForCollisions in a way that lets us put them back, after all grabs are done
             if (data["refCount"] == 1) {
+                data["heartBeat"] = now;
+                this.lastHeartBeat = now;
+
                 this.isInitialGrab = true;
                 data["gravity"] = grabbedProperties.gravity;
                 data["collidesWith"] = grabbedProperties.collidesWith;
@@ -1698,12 +1705,21 @@ function MyController(hand) {
                         z: 0
                     },
                     // bummer, it isn't easy to do bitwise collisionMask operations like this:
-                    //"collisionMask": COLLISION_MASK_WHILE_GRABBED | grabbedProperties.collisionMask
+                    // "collisionMask": COLLISION_MASK_WHILE_GRABBED | grabbedProperties.collisionMask
                     // when using string values
                     "collidesWith": COLLIDES_WITH_WHILE_GRABBED
                 };
                 Entities.editEntity(entityID, whileHeldProperties);
             } else if (data["refCount"] > 1) {
+                if (data["heartBeat"] === undefined ||
+                    now - data["heartBeat"] > HEART_BEAT_TIMEOUT) {
+                    // this entity has userData suggesting it is grabbed, but nobody is updating the hearbeat.
+                    // deactivate it before grabbing.
+                    this.resetAbandonedGrab(entityID);
+                    grabbedProperties = Entities.getEntityProperties(this.grabbedEntity, GRABBABLE_PROPERTIES);
+                    return this.activateEntity(entityID, grabbedProperties, wasLoaded);
+                }
+
                 this.isInitialGrab = false;
                 // if an object is being grabbed by more than one person (or the same person twice, but nevermind), switch
                 // the collision groups so that it wont collide with "other" avatars.  This avoids a situation where two
@@ -1716,6 +1732,17 @@ function MyController(hand) {
         setEntityCustomData(GRAB_USER_DATA_KEY, entityID, data);
         return data;
     };
+
+    this.checkForStrayChildren = function() {
+        // sometimes things can get parented to a hand and this script is unaware.  Search for such entities and
+        // unhook them.
+        var handJointIndex = MyAvatar.getJointIndex(this.hand === RIGHT_HAND ? "RightHand" : "LeftHand");
+        var children = Entities.getChildrenIDsOfJoint(MyAvatar.sessionUUID, handJointIndex);
+        children.forEach(function(childID) {
+            print("disconnecting stray child of hand: (" + _this.hand + ") " + childID);
+            Entities.editEntity(childID, {parentID: NULL_UUID});
+        });
+    }
 
     this.deactivateEntity = function(entityID, noVelocity) {
         var data = getEntityCustomData(GRAB_USER_DATA_KEY, entityID, {});

@@ -146,7 +146,7 @@ public:
 
 NetworkTexturePointer TextureCache::getTexture(const QUrl& url, TextureType type, const QByteArray& content) {
     TextureExtra extra = { type, content };
-    return ResourceCache::getResource(url, QUrl(), false, &extra).staticCast<NetworkTexture>();
+    return ResourceCache::getResource(url, QUrl(), content.isEmpty(), &extra).staticCast<NetworkTexture>();
 }
 
 /// Returns a texture version of an image file
@@ -212,12 +212,23 @@ NetworkTexture::TextureLoaderFunc NetworkTexture::getTextureLoader() const {
             return TextureLoaderFunc(model::TextureUsage::createNormalTextureFromNormalImage);
             break;
         }
+        case ROUGHNESS_TEXTURE: {
+            return TextureLoaderFunc(model::TextureUsage::createRoughnessTextureFromImage);
+            break;
+        }
+        case GLOSS_TEXTURE: {
+            return TextureLoaderFunc(model::TextureUsage::createRoughnessTextureFromGlossImage);
+            break;
+        }
+        case SPECULAR_TEXTURE: {
+            return TextureLoaderFunc(model::TextureUsage::createMetallicTextureFromImage);
+            break;
+        }
         case CUSTOM_TEXTURE: {
             return _textureLoader;
             break;
         }
         case DEFAULT_TEXTURE:
-        case SPECULAR_TEXTURE:
         case EMISSIVE_TEXTURE:
         default: {
             return TextureLoaderFunc(model::TextureUsage::create2DTextureFromImage);
@@ -335,10 +346,5 @@ void NetworkTexture::setImage(const QImage& image, void* voidTexture, int origin
     
     finishedLoading(true);
 
-    imageLoaded(image);
+    emit networkTextureCreated(qWeakPointerCast<NetworkTexture, Resource> (_self));
 }
-
-void NetworkTexture::imageLoaded(const QImage& image) {
-    // nothing by default
-}
-

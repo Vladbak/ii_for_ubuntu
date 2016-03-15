@@ -51,7 +51,6 @@
 #include "render/Engine.h"
 #include "scripting/ControllerScriptingInterface.h"
 #include "scripting/DialogsManagerScriptingInterface.h"
-#include "ui/ApplicationCompositor.h"
 #include "ui/ApplicationOverlay.h"
 #include "ui/AudioStatsDialog.h"
 #include "ui/BandwidthDialog.h"
@@ -67,6 +66,7 @@ class GLCanvas;
 class FaceTracker;
 class MainWindow;
 class AssetUpload;
+class CompositorHelper;
 
 namespace controller {
     class StateController;
@@ -120,9 +120,12 @@ public:
     QSize getDeviceSize() const;
     bool hasFocus() const;
 
+    void showCursor(const QCursor& cursor);
+
     bool isThrottleRendering() const;
 
     Camera* getCamera() { return &_myCamera; }
+    const Camera* getCamera() const { return &_myCamera; }
     // Represents the current view frustum of the avatar.
     ViewFrustum* getViewFrustum();
     const ViewFrustum* getViewFrustum() const;
@@ -147,8 +150,8 @@ public:
 
     ApplicationOverlay& getApplicationOverlay() { return _applicationOverlay; }
     const ApplicationOverlay& getApplicationOverlay() const { return _applicationOverlay; }
-    ApplicationCompositor& getApplicationCompositor() { return _compositor; }
-    const ApplicationCompositor& getApplicationCompositor() const { return _compositor; }
+    CompositorHelper& getApplicationCompositor() const;
+
     Overlays& getOverlays() { return _overlays; }
 
     bool isForeground() const { return _isForeground; }
@@ -218,13 +221,10 @@ public:
 
     float getAverageSimsPerSecond();
 
-    void fakeMouseEvent(QMouseEvent* event);
-
 signals:
     void svoImportRequested(const QString& url);
 
     void checkBackgroundDownloads();
-    void domainConnectionRefused(const QString& reason);
 
     void fullAvatarURLChanged(const QString& newValue, const QString& modelName);
 
@@ -270,10 +270,13 @@ public slots:
 
     void cycleCamera();
     void cameraMenuChanged();
+    void toggleOverlays();
+    void setOverlaysVisible(bool visible);
 
     void reloadResourceCaches();
 
     void crashApplication();
+    void deadlockApplication();
 
     void rotationModeChanged();
 
@@ -285,21 +288,18 @@ private slots:
     void idle(uint64_t now);
     void aboutToQuit();
 
-    void connectedToDomain(const QString& hostname);
+    void resettingDomain();
 
     void audioMuteToggled();
     void faceTrackerMuteToggled();
 
     void activeChanged(Qt::ApplicationState state);
 
-    void domainSettingsReceived(const QJsonObject& domainSettingsObject);
-    void handleDomainConnectionDeniedPacket(QSharedPointer<ReceivedMessage> message);
-
     void notifyPacketVersionMismatch();
 
     void loadSettings();
     void saveSettings();
-    
+
     bool acceptSnapshot(const QString& urlString);
     bool askToSetAvatarUrl(const QString& url);
     bool askToLoadScript(const QString& scriptFilenameOrURL);
@@ -325,11 +325,7 @@ private:
 
     void cleanupBeforeQuit();
 
-    void emptyLocalCache();
-
     void update(float deltaTime);
-
-    void setPalmData(Hand* hand, const controller::Pose& pose, float deltaTime, HandData::Hand whichHand, float triggerValue);
 
     // Various helper functions called during update()
     void updateLOD();
@@ -352,7 +348,6 @@ private:
     void checkSkeleton();
 
     void initializeAcceptedFiles();
-    int getRenderAmbientLight() const;
 
     void displaySide(RenderArgs* renderArgs, Camera& whichCamera, bool selfAvatarOnly = false);
 
@@ -392,7 +387,7 @@ private:
     InputPluginList _activeInputPlugins;
 
     bool _activatingDisplayPlugin { false };
-    QMap<uint32_t, gpu::FramebufferPointer> _lockedFramebufferMap;
+    QMap<gpu::TexturePointer, gpu::FramebufferPointer> _lockedFramebufferMap;
 
     MainWindow* _window;
 
@@ -474,7 +469,6 @@ private:
     typedef bool (Application::* AcceptURLMethod)(const QString &);
     static const QHash<QString, AcceptURLMethod> _acceptedExtensions;
 
-    QList<QString> _domainConnectionRefusals;
     glm::uvec2 _renderResolution;
 
     int _maxOctreePPS = DEFAULT_MAX_OCTREE_PPS;
@@ -487,7 +481,6 @@ private:
 
     Overlays _overlays;
     ApplicationOverlay _applicationOverlay;
-    ApplicationCompositor _compositor;
     OverlayConductor _overlayConductor;
 
     DialogsManagerScriptingInterface* _dialogsManagerScriptingInterface = new DialogsManagerScriptingInterface();
@@ -510,10 +503,14 @@ private:
     int _avatarAttachmentRequest = 0;
 
     bool _settingsLoaded { false };
-    bool _pendingPaint { false };
     QTimer* _idleTimer { nullptr };
 
     bool _fakedMouseEvent { false };
+
+    void checkChangeCursor();
+    mutable QMutex _changeCursorLock { QMutex::Recursive };
+    QCursor _desiredCursor{ Qt::BlankCursor };
+    bool _cursorNeedsChanging { false };
 };
 
 #endif // hifi_Application_h
