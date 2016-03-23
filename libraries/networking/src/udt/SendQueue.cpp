@@ -20,6 +20,7 @@
 #include <QtCore/QThread>
 
 #include <LogHandler.h>
+#include <NumericalConstants.h>
 #include <SharedUtil.h>
 
 #include "../NetworkLogging.h"
@@ -29,6 +30,7 @@
 #include "Socket.h"
 
 using namespace udt;
+using namespace std::chrono;
 
 template <typename Mutex1, typename Mutex2>
 class DoubleLock {
@@ -132,7 +134,6 @@ void SendQueue::sendPacket(const Packet& packet) {
     
 void SendQueue::ack(SequenceNumber ack) {
     // this is a response from the client, re-set our timeout expiry and our last response time
-    _timeoutExpiryCount = 0;
     _lastReceiverResponse = uint64_t(QDateTime::currentMSecsSinceEpoch());
     
     if (_lastACKSequenceNumber == (uint32_t) ack) {
@@ -156,11 +157,13 @@ void SendQueue::ack(SequenceNumber ack) {
     }
     
     _lastACKSequenceNumber = (uint32_t) ack;
+
+    // call notify_one on the condition_variable_any in case the send thread is sleeping with a full congestion window
+    _emptyCondition.notify_one();
 }
 
 void SendQueue::nak(SequenceNumber start, SequenceNumber end) {
     // this is a response from the client, re-set our timeout expiry
-    _timeoutExpiryCount = 0;
     _lastReceiverResponse = uint64_t(QDateTime::currentMSecsSinceEpoch());
     
     {
@@ -174,7 +177,6 @@ void SendQueue::nak(SequenceNumber start, SequenceNumber end) {
 
 void SendQueue::overrideNAKListFromPacket(ControlPacket& packet) {
     // this is a response from the client, re-set our timeout expiry
-    _timeoutExpiryCount = 0;
     _lastReceiverResponse = uint64_t(QDateTime::currentMSecsSinceEpoch());
     
     {
@@ -202,9 +204,7 @@ void SendQueue::sendHandshake() {
     std::unique_lock<std::mutex> handshakeLock { _handshakeMutex };
     if (!_hasReceivedHandshakeACK) {
         // we haven't received a handshake ACK from the client, send another now
-        static const auto handshakePacket = ControlPacket::create(ControlPacket::Handshake, sizeof(SequenceNumber));
-
-        handshakePacket->seek(0);
+        auto handshakePacket = ControlPacket::create(ControlPacket::Handshake, sizeof(SequenceNumber));
 
         handshakePacket->writePrimitive(_initialSequenceNumber);
         _socket->writeBasePacket(*handshakePacket, _destination);
@@ -280,11 +280,11 @@ void SendQueue::run() {
         // Once we're here we've either received the handshake ACK or it's going to be time to re-send a handshake.
         // Either way let's continue processing - no packets will be sent if no handshake ACK has been received.
     }
-        
+
+    // Keep an HRC to know when the next packet should have been
+    auto nextPacketTimestamp = p_high_resolution_clock::now();
+
     while (_state == State::Running) {
-        // Record how long the loop takes to execute
-        const auto loopStartTimestamp = p_high_resolution_clock::now();
-        
         bool sentAPacket = maybeResendPacket();
         
         // if we didn't find a packet to re-send AND we think we can fit a new packet on the wire
@@ -303,18 +303,20 @@ void SendQueue::run() {
         if (_state != State::Running || isInactive(sentAPacket)) {
             return;
         }
-        
+
+        // push the next packet timestamp forwards by the current packet send period
+        nextPacketTimestamp += std::chrono::microseconds(_packetSendPeriod);
+
         // sleep as long as we need until next packet send, if we can
-        const auto loopEndTimestamp = p_high_resolution_clock::now();
-        const auto timeToSleep = (loopStartTimestamp + std::chrono::microseconds(_packetSendPeriod)) - loopEndTimestamp;
+        const auto timeToSleep = duration_cast<microseconds>(nextPacketTimestamp - p_high_resolution_clock::now());
+
         std::this_thread::sleep_for(timeToSleep);
     }
 }
 
 bool SendQueue::maybeSendNewPacket() {
-    if (seqlen(SequenceNumber { (uint32_t) _lastACKSequenceNumber }, _currentSequenceNumber) <= _flowWindowSize) {
+    if (!isFlowWindowFull()) {
         // we didn't re-send a packet, so time to send a new one
-        
         
         if (!_packets.isEmpty()) {
             SequenceNumber nextNumber = getNextSequenceNumber();
@@ -436,28 +438,31 @@ bool SendQueue::maybeResendPacket() {
 }
 
 bool SendQueue::isInactive(bool sentAPacket) {
-    if (!sentAPacket) {
-        // check if it is time to break this connection
-        
-        // that will be the case if we have had 16 timeouts since hearing back from the client, and it has been
-        // at least 5 seconds
-        static const int NUM_TIMEOUTS_BEFORE_INACTIVE = 16;
-        static const int MIN_SECONDS_BEFORE_INACTIVE_MS = 5 * 1000;
-        if (_timeoutExpiryCount >= NUM_TIMEOUTS_BEFORE_INACTIVE &&
-            _lastReceiverResponse > 0 &&
-            (QDateTime::currentMSecsSinceEpoch() - _lastReceiverResponse) > MIN_SECONDS_BEFORE_INACTIVE_MS) {
-            // If the flow window has been full for over CONSIDER_INACTIVE_AFTER,
-            // then signal the queue is inactive and return so it can be cleaned up
-            
+    // check for connection timeout first
+
+    // that will be the case if we have had 16 timeouts since hearing back from the client, and it has been
+    // at least 5 seconds
+    static const int NUM_TIMEOUTS_BEFORE_INACTIVE = 16;
+    static const int MIN_MS_BEFORE_INACTIVE = 5 * 1000;
+
+    auto sinceLastResponse = (QDateTime::currentMSecsSinceEpoch() - _lastReceiverResponse);
+
+    if (sinceLastResponse >= quint64(NUM_TIMEOUTS_BEFORE_INACTIVE * (_estimatedTimeout / USECS_PER_MSEC)) &&
+        _lastReceiverResponse > 0 &&
+        sinceLastResponse > MIN_MS_BEFORE_INACTIVE) {
+        // If the flow window has been full for over CONSIDER_INACTIVE_AFTER,
+        // then signal the queue is inactive and return so it can be cleaned up
+
 #ifdef UDT_CONNECTION_DEBUG
-            qCDebug(networking) << "SendQueue to" << _destination << "reached" << NUM_TIMEOUTS_BEFORE_INACTIVE << "timeouts"
-                << "and 5s before receiving any ACK/NAK and is now inactive. Stopping.";
+        qCDebug(networking) << "SendQueue to" << _destination << "reached" << NUM_TIMEOUTS_BEFORE_INACTIVE << "timeouts"
+            << "and" << MIN_MS_BEFORE_INACTIVE << "milliseconds before receiving any ACK/NAK and is now inactive. Stopping.";
 #endif
-            
-            deactivate();
-            return true;
-        }
-        
+
+        deactivate();
+        return true;
+    }
+
+    if (!sentAPacket) {
         // During our processing above we didn't send any packets
         
         // If that is still the case we should use a condition_variable_any to sleep until we have data to handle.
@@ -466,7 +471,7 @@ bool SendQueue::isInactive(bool sentAPacket) {
         DoubleLock doubleLock(_packets.getLock(), _naksLock);
         DoubleLock::Lock locker(doubleLock, std::try_to_lock);
         
-        if (locker.owns_lock() && _packets.isEmpty() && _naks.isEmpty()) {
+        if (locker.owns_lock() && (_packets.isEmpty() || isFlowWindowFull()) && _naks.isEmpty()) {
             // The packets queue and loss list mutexes are now both locked and they're both empty
             
             if (uint32_t(_lastACKSequenceNumber) == uint32_t(_currentSequenceNumber)) {
@@ -477,21 +482,22 @@ bool SendQueue::isInactive(bool sentAPacket) {
                 // use our condition_variable_any to wait
                 auto cvStatus = _emptyCondition.wait_for(locker, EMPTY_QUEUES_INACTIVE_TIMEOUT);
                 
-                // we have the lock again - Make sure to unlock it
-                locker.unlock();
-                
-                if (cvStatus == std::cv_status::timeout) {
+                if (cvStatus == std::cv_status::timeout && (_packets.isEmpty() || isFlowWindowFull()) && _naks.isEmpty()) {
 #ifdef UDT_CONNECTION_DEBUG
                     qCDebug(networking) << "SendQueue to" << _destination << "has been empty for"
                         << EMPTY_QUEUES_INACTIVE_TIMEOUT.count()
                         << "seconds and receiver has ACKed all packets."
                         << "The queue is now inactive and will be stopped.";
 #endif
+
+                    // we have the lock again - Make sure to unlock it
+                    locker.unlock();
                     
                     // Deactivate queue
                     deactivate();
                     return true;
                 }
+
             } else {
                 // We think the client is still waiting for data (based on the sequence number gap)
                 // Let's wait either for a response from the client or until the estimated timeout
@@ -501,17 +507,18 @@ bool SendQueue::isInactive(bool sentAPacket) {
                 // use our condition_variable_any to wait
                 auto cvStatus = _emptyCondition.wait_for(locker, waitDuration);
                 
-                if (cvStatus == std::cv_status::timeout) {
-                    // increase the number of timeouts
-                    ++_timeoutExpiryCount;
+                if (cvStatus == std::cv_status::timeout && (_packets.isEmpty() || isFlowWindowFull()) && _naks.isEmpty()
+                    && SequenceNumber(_lastACKSequenceNumber) < _currentSequenceNumber) {
+                    // after a timeout if we still have sent packets that the client hasn't ACKed we
+                    // add them to the loss list
                     
-                    if (SequenceNumber(_lastACKSequenceNumber) < _currentSequenceNumber) {
-                        // after a timeout if we still have sent packets that the client hasn't ACKed we
-                        // add them to the loss list
-                        
-                        // Note that thanks to the DoubleLock we have the _naksLock right now
-                        _naks.append(SequenceNumber(_lastACKSequenceNumber) + 1, _currentSequenceNumber);
-                    }
+                    // Note that thanks to the DoubleLock we have the _naksLock right now
+                    _naks.append(SequenceNumber(_lastACKSequenceNumber) + 1, _currentSequenceNumber);
+
+                    // we have the lock again - time to unlock it
+                    locker.unlock();
+                    
+                    emit timeout();
                 }
             }
         }
@@ -525,4 +532,8 @@ void SendQueue::deactivate() {
     emit queueInactive();
     
     _state = State::Stopped;
+}
+
+bool SendQueue::isFlowWindowFull() const {
+    return seqlen(SequenceNumber { (uint32_t) _lastACKSequenceNumber }, _currentSequenceNumber)  > _flowWindowSize;
 }

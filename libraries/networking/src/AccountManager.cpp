@@ -674,7 +674,7 @@ void AccountManager::processGeneratedKeypair() {
         }
 
         // setup a multipart upload to send up the public key
-        QHttpMultiPart* requestMultiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+        /*QHttpMultiPart* requestMultiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
     
         QHttpPart keyPart;
         keyPart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("application/octet-stream"));
@@ -682,9 +682,9 @@ void AccountManager::processGeneratedKeypair() {
                           QVariant("form-data; name=\"public_key\"; filename=\"public_key\""));
         keyPart.setBody(keypairGenerator->getPublicKey());
 
-        requestMultiPart->append(keyPart);
+        requestMultiPart->append(keyPart);*/
    
-        /*
+        
         QJsonObject jsonObj;
         jsonObj["public_key"] = QString(keypairGenerator->getPublicKey().toBase64());
         qCDebug(networking) << "publicKey: " << keypairGenerator->getPublicKey().toBase64();
@@ -692,7 +692,7 @@ void AccountManager::processGeneratedKeypair() {
         QJsonDocument doc(jsonObj);
         QString postData(doc.toJson(QJsonDocument::Compact));
         QByteArray postDataBytes;
-        postDataBytes.append(postData);*/
+        postDataBytes.append(postData);
 
         // setup callback parameters so we know once the keypair upload has succeeded or failed
         JSONCallbackParameters callbackParameters;
@@ -702,7 +702,7 @@ void AccountManager::processGeneratedKeypair() {
         callbackParameters.errorCallbackMethod = "publicKeyUploadFailed";
     
         sendRequest(uploadPath, AccountManagerAuth::Optional, QNetworkAccessManager::PutOperation,
-                    callbackParameters, QByteArray(), requestMultiPart);
+            callbackParameters, postDataBytes/*QByteArray(), requestMultiPart*/);
         
         keypairGenerator->deleteLater();
     } else {
