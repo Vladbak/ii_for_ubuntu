@@ -209,7 +209,7 @@ void IceServer::requestDomainPublicKey(const QUuid& domainID) {
     QNetworkAccessManager* manager = new QNetworkAccessManager { this };
     connect(manager, &QNetworkAccessManager::finished, this, &IceServer::publicKeyReplyFinished);
 
-    QUrl publicKeyURL { NetworkingConstants::METAVERSE_SERVER_URL };
+    QUrl publicKeyURL { NetworkingConstants::UTII_AUTH_SERVER_URL };
     QString publicKeyPath = QString("/api/v1/domains/%1/public_key").arg(uuidStringWithoutCurlyBraces(domainID));
     publicKeyURL.setPath(publicKeyPath);
 

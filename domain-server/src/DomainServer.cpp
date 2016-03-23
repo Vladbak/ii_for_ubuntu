@@ -192,7 +192,7 @@ bool DomainServer::optionallySetupOAuth() {
 
     // if we don't have an oauth provider URL then we default to the default node auth url
     if (_oauthProviderURL.isEmpty()) {
-        _oauthProviderURL = NetworkingConstants::METAVERSE_SERVER_URL;
+        _oauthProviderURL = NetworkingConstants::UTII_AUTH_SERVER_URL;
     }
 
     AccountManager& accountManager = AccountManager::getInstance();

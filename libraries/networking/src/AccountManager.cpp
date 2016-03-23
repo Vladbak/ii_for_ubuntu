@@ -701,7 +701,7 @@ void AccountManager::processGeneratedKeypair() {
         callbackParameters.errorCallbackReceiver = this;
         callbackParameters.errorCallbackMethod = "publicKeyUploadFailed";
     
-        sendRequest(uploadPath, AccountManagerAuth::Optional, QNetworkAccessManager::PutOperation,
+        sendRequest(uploadPath, AccountManagerAuth::Required, QNetworkAccessManager::PostOperation,
             callbackParameters, postDataBytes/*QByteArray(), requestMultiPart*/);
         
         keypairGenerator->deleteLater();

@@ -1,6 +1,6 @@
 var Settings = {
   showAdvanced: false,
-  METAVERSE_URL: 'https://metaverse.highfidelity.com',
+  METAVERSE_URL: 'https://148.251.192.170',
   ADVANCED_CLASS: 'advanced-setting',
   TRIGGER_CHANGE_CLASS: 'trigger-change',
   DATA_ROW_CLASS: 'value-row',
