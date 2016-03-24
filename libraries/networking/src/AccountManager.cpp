@@ -34,6 +34,10 @@
 #include "AccountManager.h"
 #include "NetworkLogging.h"
 
+#include <openssl/err.h>
+#include <openssl/rsa.h>
+#include <openssl/x509.h>
+
 const bool VERBOSE_HTTP_REQUEST_DEBUGGING = false;
 
 AccountManager& AccountManager::getInstance(bool forceReset) {
@@ -683,11 +687,20 @@ void AccountManager::processGeneratedKeypair() {
         keyPart.setBody(keypairGenerator->getPublicKey());
 
         requestMultiPart->append(keyPart);*/
+
+        /* UTII: lets convert the public key */
+        const uchar *dp = reinterpret_cast<const uchar*>(keypairGenerator->getPublicKey().constData());
+        RSA* rsa = d2i_RSAPublicKey(NULL, &dp, keypairGenerator->getPublicKey().size());
+        unsigned char* publicKey = NULL;
+        int length = i2d_RSA_PUBKEY(rsa, &publicKey);
+        QByteArray resultingByteArray = QByteArray{ reinterpret_cast<char*>(publicKey), length };
+        OPENSSL_free(publicKey);
+        RSA_free(rsa);
    
         
         QJsonObject jsonObj;
-        jsonObj["public_key"] = QString(keypairGenerator->getPublicKey().toBase64());
-        qCDebug(networking) << "publicKey: " << keypairGenerator->getPublicKey().toBase64();
+        jsonObj["public_key"] = QString(resultingByteArray.toBase64());
+        qCDebug(networking) << "publicKey: " << resultingByteArray.toBase64();
 
         QJsonDocument doc(jsonObj);
         QString postData(doc.toJson(QJsonDocument::Compact));
