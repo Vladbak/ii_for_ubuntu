@@ -19,6 +19,7 @@
 #include <gpu/GLBackend.h>
 #include <CursorManager.h>
 #include <gl/GLWidget.h>
+#include <shared/NsightHelpers.h>
 
 #include "../Logging.h"
 #include "../CompositorHelper.h"
@@ -31,7 +32,7 @@ glm::uvec2 HmdDisplayPlugin::getRecommendedUiSize() const {
     return CompositorHelper::VIRTUAL_SCREEN_SIZE;
 }
 
-void HmdDisplayPlugin::internalActivate() {
+bool HmdDisplayPlugin::internalActivate() {
     _monoPreview = _container->getBoolSetting("monoPreview", DEFAULT_MONO_VIEW);
 
     _container->addMenuItem(PluginType::DISPLAY_PLUGIN, MENU_PATH(), MONO_PREVIEW,
@@ -40,7 +41,8 @@ void HmdDisplayPlugin::internalActivate() {
         _container->setBoolSetting("monoPreview", _monoPreview);
     }, true, _monoPreview);
     _container->removeMenu(FRAMERATE);
-    Parent::internalActivate();
+
+    return Parent::internalActivate();
 }
 
 void HmdDisplayPlugin::customizeContext() {
@@ -67,10 +69,11 @@ void HmdDisplayPlugin::compositeOverlay() {
         // set the alpha
         Uniform<float>(*_program, _alphaUniform).Set(overlayAlpha);
 
+        auto eyePoses = _currentPresentFrameInfo.eyePoses;
         _sphereSection->Use();
         for_each_eye([&](Eye eye) {
             eyeViewport(eye);
-            auto modelView = glm::inverse(_currentRenderEyePoses[eye]); // *glm::translate(mat4(), vec3(0, 0, -1));
+            auto modelView = glm::inverse(eyePoses[eye]); // *glm::translate(mat4(), vec3(0, 0, -1));
             auto mvp = _eyeProjections[eye] * modelView;
             Uniform<glm::mat4>(*_program, _mvpUniform).Set(mvp);
             _sphereSection->Draw();
@@ -93,10 +96,10 @@ void HmdDisplayPlugin::compositePointer() {
         // Mouse pointer
         _plane->Use();
         // Reconstruct the headpose from the eye poses
-        auto headPosition = (vec3(_currentRenderEyePoses[Left][3]) + vec3(_currentRenderEyePoses[Right][3])) / 2.0f;
+        auto headPosition = vec3(_currentPresentFrameInfo.headPose[3]);
         for_each_eye([&](Eye eye) {
             eyeViewport(eye);
-            auto reticleTransform = compositorHelper->getReticleTransform(_currentRenderEyePoses[eye], headPosition);
+            auto reticleTransform = compositorHelper->getReticleTransform(_currentPresentFrameInfo.eyePoses[eye], headPosition);
             auto mvp = _eyeProjections[eye] * reticleTransform;
             Uniform<glm::mat4>(*_program, _mvpUniform).Set(mvp);
             _plane->Draw();
@@ -106,6 +109,9 @@ void HmdDisplayPlugin::compositePointer() {
 }
 
 void HmdDisplayPlugin::internalPresent() {
+
+    PROFILE_RANGE_EX(__FUNCTION__, 0xff00ff00, (uint64_t)presentCount())
+
     // Composite together the scene, overlay and mouse cursor
     hmdPresent();
 
@@ -149,19 +155,34 @@ void HmdDisplayPlugin::internalPresent() {
         });
         swapBuffers();
     }
+
+    postPreview();
 }
 
 void HmdDisplayPlugin::setEyeRenderPose(uint32_t frameIndex, Eye eye, const glm::mat4& pose) {
     Lock lock(_mutex);
-    _renderEyePoses[frameIndex][eye] = pose;
+    FrameInfo& frame = _frameInfos[frameIndex];
+    frame.eyePoses[eye] = pose;
 }
 
 void HmdDisplayPlugin::updateFrameData() {
+    // Check if we have old frame data to discard
+    {
+        Lock lock(_mutex);
+        auto itr = _frameInfos.find(_currentRenderFrameIndex);
+        if (itr != _frameInfos.end()) {
+            _frameInfos.erase(itr);
+        }
+    }
+
     Parent::updateFrameData();
-    Lock lock(_mutex);
-    _currentRenderEyePoses = _renderEyePoses[_currentRenderFrameIndex];
+
+    {
+        Lock lock(_mutex);
+        _currentPresentFrameInfo = _frameInfos[_currentRenderFrameIndex];
+    }
 }
 
 glm::mat4 HmdDisplayPlugin::getHeadPose() const {
-    return _headPoseCache.get();
+    return _currentRenderFrameInfo.get().headPose;
 }

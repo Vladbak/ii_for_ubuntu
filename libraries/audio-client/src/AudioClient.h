@@ -16,6 +16,7 @@
 #include <memory>
 #include <vector>
 
+#include <QtCore/qsystemdetection.h>
 #include <QtCore/QByteArray>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QObject>
@@ -127,6 +128,10 @@ public:
     void setOrientationGetter(AudioOrientationGetter orientationGetter) { _orientationGetter = orientationGetter; }
 
     static const float CALLBACK_ACCELERATOR_RATIO;
+
+#ifdef Q_OS_WIN
+    static QString friendlyNameForAudioDevice(wchar_t* guid);
+#endif
 
 public slots:
     void start();

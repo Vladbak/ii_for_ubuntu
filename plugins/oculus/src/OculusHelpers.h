@@ -14,6 +14,8 @@
 
 #include <gl/OglplusHelpers.h>
 
+void logWarning(const char* what);
+void logFatal(const char* what);
 bool oculusAvailable();
 ovrSession acquireOculusSession();
 void releaseOculusSession();
@@ -109,10 +111,10 @@ inline ovrPosef ovrPoseFromGlm(const glm::mat4 & m) {
 // then submit it and increment to the next texture.
 // The Oculus SDK manages the creation and destruction of
 // the textures
-struct SwapFramebufferWrapper : public FramebufferWrapper<ovrSwapTextureSet*, void*> {
+struct SwapFramebufferWrapper : public FramebufferWrapper<ovrTextureSwapChain, void*> {
     SwapFramebufferWrapper(const ovrSession& session);
     ~SwapFramebufferWrapper();
-    void Increment();
+    void Commit();
     void Resize(const uvec2 & size);
 protected:
     void initColor() override final;

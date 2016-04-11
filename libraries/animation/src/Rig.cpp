@@ -20,6 +20,7 @@
 #include <GeometryUtil.h>
 #include <NumericalConstants.h>
 #include <DebugDraw.h>
+#include <shared/NsightHelpers.h>
 
 #include "AnimationLogging.h"
 #include "AnimClip.h"
@@ -852,6 +853,8 @@ void Rig::updateAnimationStateHandlers() { // called on avatar update thread (wh
 
 void Rig::updateAnimations(float deltaTime, glm::mat4 rootTransform) {
 
+    PROFILE_RANGE_EX(__FUNCTION__, 0xffff00ff, 0);
+
     setModelOffset(rootTransform);
 
     if (_animNode) {
@@ -1053,7 +1056,9 @@ void Rig::updateEyeJoint(int index, const glm::vec3& modelTranslation, const glm
 
         // limit rotation
         const float MAX_ANGLE = 30.0f * RADIANS_PER_DEGREE;
-        deltaQuat = glm::angleAxis(glm::clamp(glm::angle(deltaQuat), -MAX_ANGLE, MAX_ANGLE), glm::axis(deltaQuat));
+        if (fabsf(glm::angle(deltaQuat)) > MAX_ANGLE) {
+            deltaQuat = glm::angleAxis(glm::clamp(glm::angle(deltaQuat), -MAX_ANGLE, MAX_ANGLE), glm::axis(deltaQuat));
+        }
 
         // directly set absolutePose rotation
         _internalPoseSet._absolutePoses[index].rot = deltaQuat * headQuat;

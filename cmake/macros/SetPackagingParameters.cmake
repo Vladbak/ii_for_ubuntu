@@ -51,7 +51,7 @@ macro(SET_PACKAGING_PARAMETERS)
 #UTII     set(CONSOLE_INSTALL_DIR ${DMG_SUBFOLDER_NAME})
     set(INTERFACE_INSTALL_DIR ${DMG_SUBFOLDER_NAME})
 
-#UTII     set(CONSOLE_EXEC_NAME "Server Console.app")
+#UTII     set(CONSOLE_EXEC_NAME "Sandbox.app")
 #UTII     set(CONSOLE_INSTALL_APP_PATH "${CONSOLE_INSTALL_DIR}/${CONSOLE_EXEC_NAME}")
 
 #UTII     set(CONSOLE_APP_CONTENTS "${CONSOLE_INSTALL_APP_PATH}/Contents")
@@ -83,11 +83,18 @@ macro(SET_PACKAGING_PARAMETERS)
     # shortcut names
     if (PRODUCTION_BUILD)
       set(INTERFACE_SHORTCUT_NAME "Infinity Island")
-#UTII       set(CONSOLE_SHORTCUT_NAME "Server Console")
+#UTII       set(CONSOLE_SHORTCUT_NAME "Sandbox")
     else ()
       set(INTERFACE_SHORTCUT_NAME "Infinity Island - ${BUILD_VERSION}")
-#UTII       set(CONSOLE_SHORTCUT_NAME "Server Console - ${BUILD_VERSION}")
+#UTII       set(CONSOLE_SHORTCUT_NAME "Sandbox - ${BUILD_VERSION}")
     endif ()
+
+    set(INTERFACE_HF_SHORTCUT_NAME "High Fidelity ${INTERFACE_SHORTCUT_NAME}")
+    set(CONSOLE_HF_SHORTCUT_NAME "High Fidelity ${CONSOLE_SHORTCUT_NAME}")
+
+    set(PRE_SANDBOX_INTERFACE_SHORTCUT_NAME "High Fidelity")
+    set(PRE_SANDBOX_CONSOLE_SHORTCUT_NAME "Server Console")
+
     # check if we need to find signtool
     if (PRODUCTION_BUILD OR PR_BUILD)
       find_program(SIGNTOOL_EXECUTABLE signtool PATHS "C:/Program Files (x86)/Windows Kits/8.1" PATH_SUFFIXES "bin/x64")

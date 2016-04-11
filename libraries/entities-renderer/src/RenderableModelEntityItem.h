@@ -38,12 +38,6 @@ public:
                                                 EntityPropertyFlags& propertyFlags, bool overwriteLocalData,
                                                 bool& somethingChanged) override;
 
-    virtual void somethingChangedNotification() override {
-        // FIX ME: this is overly aggressive. We only really need to simulate() if something about
-        // the world space transform has changed and/or if some animation is occurring.
-        _needsInitialSimulation = true;
-    }
-
     virtual bool readyToAddToScene(RenderArgs* renderArgs = nullptr);
     virtual bool addToScene(EntityItemPointer self, std::shared_ptr<render::Scene> scene, render::PendingChanges& pendingChanges) override;
     virtual void removeFromScene(EntityItemPointer self, std::shared_ptr<render::Scene> scene, render::PendingChanges& pendingChanges) override;
@@ -75,13 +69,23 @@ public:
     virtual bool setAbsoluteJointRotationInObjectFrame(int index, const glm::quat& rotation) override;
     virtual bool setAbsoluteJointTranslationInObjectFrame(int index, const glm::vec3& translation) override;
 
+    virtual void setJointRotations(const QVector<glm::quat>& rotations) override;
+    virtual void setJointRotationsSet(const QVector<bool>& rotationsSet) override;
+    virtual void setJointTranslations(const QVector<glm::vec3>& translations) override;
+    virtual void setJointTranslationsSet(const QVector<bool>& translationsSet) override;
+
     virtual void loader() override;
-    virtual void locationChanged() override;
+    virtual void locationChanged(bool tellPhysics = true) override;
 
     virtual void resizeJointArrays(int newSize = -1) override;
 
     virtual int getJointIndex(const QString& name) const override;
     virtual QStringList getJointNames() const override;
+
+    // These operate on a copy of the renderAnimationProperties, so they can be accessed
+    // without having the entityTree lock.
+    bool hasRenderAnimation() const { return !_renderAnimationProperties.getURL().isEmpty(); }
+    const QString& getRenderAnimationURL() const { return _renderAnimationProperties.getURL(); }
 
 private:
     QVariantMap parseTexturesToMap(QString textures);
@@ -91,18 +95,22 @@ private:
     bool _needsInitialSimulation = true;
     bool _needsModelReload = true;
     EntityTreeRenderer* _myRenderer = nullptr;
-    QString _currentTextures;
-    QStringList _originalTextures;
-    QVariantMap _originalTexturesMap;
+    QString _lastTextures;
+    QVariantMap _currentTextures;
+    QVariantMap _originalTextures;
     bool _originalTexturesRead = false;
     QVector<QVector<glm::vec3>> _points;
     bool _dimensionsInitialized = true;
+
+    AnimationPropertyGroup _renderAnimationProperties;
 
     render::ItemID _myMetaItem{ render::Item::INVALID_ITEM_ID };
 
     bool _showCollisionHull = false;
 
     bool getAnimationFrame();
+
+    bool _needsJointSimulation { false };
 };
 
 #endif // hifi_RenderableModelEntityItem_h

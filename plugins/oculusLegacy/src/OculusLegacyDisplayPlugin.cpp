@@ -35,10 +35,14 @@ void OculusLegacyDisplayPlugin::resetSensors() {
     ovrHmd_RecenterPose(_hmd);
 }
 
-void OculusLegacyDisplayPlugin::updateHeadPose(uint32_t frameIndex) {
+void OculusLegacyDisplayPlugin::beginFrameRender(uint32_t frameIndex) {
+    FrameInfo frame;
+    frame.predictedDisplayTime = frame.sensorSampleTime = ovr_GetTimeInSeconds();
+    _trackingState = ovrHmd_GetTrackingState(_hmd, frame.predictedDisplayTime);
+    frame.headPose = toGlm(_trackingState.HeadPose.ThePose);
+    _currentRenderFrameInfo.set(frame);
     Lock lock(_mutex);
-    _trackingState = ovrHmd_GetTrackingState(_hmd, ovr_GetTimeInSeconds());
-    _headPoseCache.set(toGlm(_trackingState.HeadPose.ThePose));
+    _frameInfos[frameIndex] = frame;
 }
 
 bool OculusLegacyDisplayPlugin::isSupported() const {
@@ -68,18 +72,20 @@ bool OculusLegacyDisplayPlugin::isSupported() const {
     return result;
 }
 
-void OculusLegacyDisplayPlugin::internalActivate() {
+bool OculusLegacyDisplayPlugin::internalActivate() {
     Parent::internalActivate();
     
     if (!(ovr_Initialize(nullptr))) {
         Q_ASSERT(false);
         qFatal("Failed to Initialize SDK");
+        return false;
     }
     
     _hswDismissed = false;
     _hmd = ovrHmd_Create(0);
     if (!_hmd) {
         qFatal("Failed to acquire HMD");
+        return false;
     }
     
     _ipd = ovrHmd_GetFloat(_hmd, OVR_KEY_IPD, _ipd);
@@ -107,6 +113,8 @@ void OculusLegacyDisplayPlugin::internalActivate() {
                                   ovrTrackingCap_Orientation | ovrTrackingCap_Position | ovrTrackingCap_MagYawCorrection, 0)) {
         qFatal("Could not attach to sensor device");
     }
+
+    return true;
 }
 
 void OculusLegacyDisplayPlugin::internalDeactivate() {

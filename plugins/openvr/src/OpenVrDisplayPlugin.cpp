@@ -21,7 +21,7 @@
 #include <PerfStat.h>
 #include <plugins/PluginContainer.h>
 #include <ViewFrustum.h>
-
+#include <shared/NsightHelpers.h>
 #include "OpenVrHelpers.h"
 
 Q_DECLARE_LOGGING_CATEGORY(displayplugins)
@@ -41,14 +41,18 @@ bool OpenVrDisplayPlugin::isSupported() const {
     return !isOculusPresent() && vr::VR_IsHmdPresent();
 }
 
-void OpenVrDisplayPlugin::internalActivate() {
+bool OpenVrDisplayPlugin::internalActivate() {
     Parent::internalActivate();
+
     _container->setIsOptionChecked(StandingHMDSensorMode, true);
 
     if (!_system) {
         _system = acquireOpenVrSystem();
     }
-    Q_ASSERT(_system);
+    if (!_system) {
+        qWarning() << "Failed to initialize OpenVR";
+        return false;
+    }
 
     _system->GetRecommendedRenderTargetSize(&_renderTargetSize.x, &_renderTargetSize.y);
     // Recommended render target size is per-eye, so double the X size for 
@@ -69,6 +73,9 @@ void OpenVrDisplayPlugin::internalActivate() {
     _compositor = vr::VRCompositor();
     Q_ASSERT(_compositor);
 
+    // enable async time warp
+    // _compositor->ForceInterleavedReprojectionOn(true);
+
     // set up default sensor space such that the UI overlay will align with the front of the room.
     auto chaperone = vr::VRChaperone();
     if (chaperone) {
@@ -83,6 +90,8 @@ void OpenVrDisplayPlugin::internalActivate() {
     } else {
         qDebug() << "OpenVR: error could not get chaperone pointer";
     }
+
+    return true;
 }
 
 void OpenVrDisplayPlugin::internalDeactivate() {
@@ -112,25 +121,23 @@ void OpenVrDisplayPlugin::resetSensors() {
     _sensorResetMat = glm::inverse(cancelOutRollAndPitch(m));
 }
 
-void OpenVrDisplayPlugin::updateHeadPose(uint32_t frameIndex) {
+void OpenVrDisplayPlugin::beginFrameRender(uint32_t frameIndex) {
 
-    float displayFrequency = _system->GetFloatTrackedDeviceProperty(vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_DisplayFrequency_Float);
-    float frameDuration = 1.f / displayFrequency;
-    float vsyncToPhotons = _system->GetFloatTrackedDeviceProperty(vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_SecondsFromVsyncToPhotons_Float);
+    double displayFrequency = _system->GetFloatTrackedDeviceProperty(vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_DisplayFrequency_Float);
+    double frameDuration = 1.f / displayFrequency;
+    double vsyncToPhotons = _system->GetFloatTrackedDeviceProperty(vr::k_unTrackedDeviceIndex_Hmd, vr::Prop_SecondsFromVsyncToPhotons_Float);
 
+    FrameInfo frame;
 #if THREADED_PRESENT
-    // TODO: this seems awfuly long, 44ms total, but it produced the best results.
-    const float NUM_PREDICTION_FRAMES = 3.0f;
-    float predictedSecondsFromNow = NUM_PREDICTION_FRAMES * frameDuration + vsyncToPhotons;
+    // 3 frames of prediction + vsyncToPhotons = 44ms total
+    const double NUM_PREDICTION_FRAMES = 3.0f;
+    frame.predictedDisplayTime = NUM_PREDICTION_FRAMES * frameDuration + vsyncToPhotons;
 #else
-    uint64_t frameCounter;
-    float timeSinceLastVsync;
-    _system->GetTimeSinceLastVsync(&timeSinceLastVsync, &frameCounter);
-    float predictedSecondsFromNow = 3.0f * frameDuration - timeSinceLastVsync + vsyncToPhotons;
+    frame.predictedDisplayTime = frameDuration + vsyncToPhotons;
 #endif
 
     vr::TrackedDevicePose_t predictedTrackedDevicePose[vr::k_unMaxTrackedDeviceCount];
-    _system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, predictedSecondsFromNow, predictedTrackedDevicePose, vr::k_unMaxTrackedDeviceCount);
+    _system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, frame.predictedDisplayTime, predictedTrackedDevicePose, vr::k_unMaxTrackedDeviceCount);
 
     // copy and process predictedTrackedDevicePoses
     for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++) {
@@ -139,11 +146,17 @@ void OpenVrDisplayPlugin::updateHeadPose(uint32_t frameIndex) {
         _trackedDeviceLinearVelocities[i] = transformVectorFast(_sensorResetMat, toGlm(_trackedDevicePose[i].vVelocity));
         _trackedDeviceAngularVelocities[i] = transformVectorFast(_sensorResetMat, toGlm(_trackedDevicePose[i].vAngularVelocity));
     }
+    frame.headPose = _trackedDevicePoseMat4[0];
+    _currentRenderFrameInfo.set(frame);
 
-    _headPoseCache.set(_trackedDevicePoseMat4[0]);
+    Lock lock(_mutex);
+    _frameInfos[frameIndex] = frame;
 }
 
 void OpenVrDisplayPlugin::hmdPresent() {
+
+    PROFILE_RANGE_EX(__FUNCTION__, 0xff00ff00, (uint64_t)_currentRenderFrameIndex)
+
     // Flip y-axis since GL UV coords are backwards.
     static vr::VRTextureBounds_t leftBounds{ 0, 0, 0.5f, 1 };
     static vr::VRTextureBounds_t rightBounds{ 0.5f, 0, 1, 1 };
@@ -152,6 +165,10 @@ void OpenVrDisplayPlugin::hmdPresent() {
 
     _compositor->Submit(vr::Eye_Left, &texture, &leftBounds);
     _compositor->Submit(vr::Eye_Right, &texture, &rightBounds);
+}
+
+void OpenVrDisplayPlugin::postPreview() {
+    PROFILE_RANGE_EX(__FUNCTION__, 0xff00ff00, (uint64_t)_currentRenderFrameIndex)
 
     vr::TrackedDevicePose_t currentTrackedDevicePose[vr::k_unMaxTrackedDeviceCount];
     _compositor->WaitGetPoses(currentTrackedDevicePose, vr::k_unMaxTrackedDeviceCount, nullptr, 0);

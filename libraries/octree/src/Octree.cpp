@@ -37,6 +37,7 @@
 #include <NetworkAccessManager.h>
 #include <OctalCode.h>
 #include <udt/PacketHeaders.h>
+#include <ResourceManager.h>
 #include <SharedUtil.h>
 #include <PathUtils.h>
 #include <Gzip.h>
@@ -383,9 +384,10 @@ int Octree::readElementData(OctreeElementPointer destinationElement, const unsig
         // check the exists mask to see if we have a child to traverse into
 
         if (oneAtBit(childInBufferMask, childIndex)) {
-            if (!destinationElement->getChildAtIndex(childIndex)) {
+            auto childAt = destinationElement->getChildAtIndex(childIndex);
+            if (!childAt) {
                 // add a child at that index, if it doesn't exist
-                destinationElement->addChildAtIndex(childIndex);
+                childAt = destinationElement->addChildAtIndex(childIndex);
                 bool nodeIsDirty = destinationElement->isDirty();
                 if (nodeIsDirty) {
                     _isDirty = true;
@@ -393,8 +395,7 @@ int Octree::readElementData(OctreeElementPointer destinationElement, const unsig
             }
 
             // tell the child to read the subsequent data
-            int lowerLevelBytes = readElementData(destinationElement->getChildAtIndex(childIndex),
-                                      nodeData + bytesRead, bytesLeftToRead, args);
+            int lowerLevelBytes = readElementData(childAt, nodeData + bytesRead, bytesLeftToRead, args);
 
             bytesRead += lowerLevelBytes;
             bytesLeftToRead -= lowerLevelBytes;
@@ -1674,35 +1675,24 @@ bool Octree::readJSONFromGzippedFile(QString qFileName) {
 }
 
 bool Octree::readFromURL(const QString& urlString) {
-    bool readOk = false;
+    auto request = std::unique_ptr<ResourceRequest>(ResourceManager::createResourceRequest(this, urlString));
 
-    // determine if this is a local file or a network resource
-    QUrl url(urlString);
-
-    if (url.isLocalFile()) {
-        readOk = readFromFile(qPrintable(url.toLocalFile()));
-    } else {
-        QNetworkRequest request;
-        request.setHeader(QNetworkRequest::UserAgentHeader, HIGH_FIDELITY_USER_AGENT);
-        request.setUrl(url);
-
-        QNetworkAccessManager& networkAccessManager = NetworkAccessManager::getInstance();
-        QNetworkReply* reply = networkAccessManager.get(request);
-
-        qCDebug(octree) << "Downloading svo at" << qPrintable(urlString);
-
-        QEventLoop loop;
-        QObject::connect(reply, SIGNAL(finished()), &loop, SLOT(quit()));
-        loop.exec();
-
-        if (reply->error() == QNetworkReply::NoError) {
-            int resourceSize = reply->bytesAvailable();
-            QDataStream inputStream(reply);
-            readOk = readFromStream(resourceSize, inputStream);
-        }
-        delete reply;
+    if (!request) {
+        return false;
     }
-    return readOk;
+
+    QEventLoop loop;
+    connect(request.get(), &ResourceRequest::finished, &loop, &QEventLoop::quit);
+    request->send();
+    loop.exec();
+
+    if (request->getResult() != ResourceRequest::Success) {
+        return false;
+    }
+
+    auto data = request->getData();
+    QDataStream inputStream(data);
+    return readFromStream(data.size(), inputStream);
 }
 
 

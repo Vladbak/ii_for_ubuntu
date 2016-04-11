@@ -6,9 +6,34 @@
 //  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
 //
 #include "OculusDisplayPlugin.h"
+
+// Odd ordering of header is required to avoid 'macro redinition warnings'
+#include <AudioClient.h>
+
+#include <OVR_CAPI_Audio.h>
+
+#include <shared/NsightHelpers.h>
+
 #include "OculusHelpers.h"
 
 const QString OculusDisplayPlugin::NAME("Oculus Rift");
+static ovrPerfHudMode currentDebugMode = ovrPerfHud_Off;
+
+bool OculusDisplayPlugin::internalActivate() {
+    bool result = Parent::internalActivate();
+    currentDebugMode = ovrPerfHud_Off;
+    if (result && _session) {
+        ovr_SetInt(_session, OVR_PERF_HUD_MODE, currentDebugMode);
+    }
+    return result;
+}
+
+void OculusDisplayPlugin::cycleDebugOutput() {
+    if (_session) {
+        currentDebugMode = static_cast<ovrPerfHudMode>((currentDebugMode + 1) % ovrPerfHud_Count);
+        ovr_SetInt(_session, OVR_PERF_HUD_MODE, currentDebugMode);
+    }
+}
 
 void OculusDisplayPlugin::customizeContext() {
     Parent::customizeContext();
@@ -27,6 +52,16 @@ void OculusDisplayPlugin::customizeContext() {
 }
 
 void OculusDisplayPlugin::uncustomizeContext() {
+    using namespace oglplus;
+    
+    // Present a final black frame to the HMD
+    _compositeFramebuffer->Bound(FramebufferTarget::Draw, [] {
+        Context::ClearColor(0, 0, 0, 1);
+        Context::Clear().ColorBuffer();
+    });
+
+    hmdPresent();
+    
 #if (OVR_MAJOR_VERSION >= 6)
     _sceneFbo.reset();
 #endif
@@ -47,24 +82,47 @@ void blit(const SrcFbo& srcFbo, const DstFbo& dstFbo) {
     });
 }
 
-void OculusDisplayPlugin::updateFrameData() {
-    Parent::updateFrameData();
-    _sceneLayer.RenderPose[ovrEyeType::ovrEye_Left] = ovrPoseFromGlm(_currentRenderEyePoses[Left]);
-    _sceneLayer.RenderPose[ovrEyeType::ovrEye_Right] = ovrPoseFromGlm(_currentRenderEyePoses[Right]);
-}
-
 void OculusDisplayPlugin::hmdPresent() {
+
+    PROFILE_RANGE_EX(__FUNCTION__, 0xff00ff00, (uint64_t)_currentRenderFrameIndex)
+
     if (!_currentSceneTexture) {
         return;
     }
 
     blit(_compositeFramebuffer, _sceneFbo);
+    _sceneFbo->Commit();
     {
+        _sceneLayer.SensorSampleTime = _currentPresentFrameInfo.sensorSampleTime;
+        _sceneLayer.RenderPose[ovrEyeType::ovrEye_Left] = ovrPoseFromGlm(_currentPresentFrameInfo.headPose);
+        _sceneLayer.RenderPose[ovrEyeType::ovrEye_Right] = ovrPoseFromGlm(_currentPresentFrameInfo.headPose);
         ovrLayerHeader* layers = &_sceneLayer.Header;
         ovrResult result = ovr_SubmitFrame(_session, _currentRenderFrameIndex, &_viewScaleDesc, &layers, 1);
         if (!OVR_SUCCESS(result)) {
-            qDebug() << result;
+            logWarning("Failed to present");
         }
     }
-    _sceneFbo->Increment();
 }
+
+bool OculusDisplayPlugin::isHmdMounted() const {
+    ovrSessionStatus status;
+    return (OVR_SUCCESS(ovr_GetSessionStatus(_session, &status)) && 
+        (ovrFalse != status.HmdMounted));
+}
+
+QString OculusDisplayPlugin::getPreferredAudioInDevice() const { 
+    WCHAR buffer[OVR_AUDIO_MAX_DEVICE_STR_SIZE];
+    if (!OVR_SUCCESS(ovr_GetAudioDeviceInGuidStr(buffer))) {
+        return QString();
+    }
+    return AudioClient::friendlyNameForAudioDevice(buffer);
+}
+
+QString OculusDisplayPlugin::getPreferredAudioOutDevice() const { 
+    WCHAR buffer[OVR_AUDIO_MAX_DEVICE_STR_SIZE];
+    if (!OVR_SUCCESS(ovr_GetAudioDeviceOutGuidStr(buffer))) {
+        return QString();
+    }
+    return AudioClient::friendlyNameForAudioDevice(buffer);
+}
+

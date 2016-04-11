@@ -44,6 +44,7 @@ namespace render {
     typedef unsigned int ItemID;
 }
 class MeshPartPayload;
+class ModelMeshPartPayload;
 class ModelRenderLocations;
 
 inline uint qHash(const std::shared_ptr<MeshPartPayload>& a, uint seed) {
@@ -73,40 +74,44 @@ public:
     }
 
     /// Sets the URL of the model to render.
+    // Should only be called from the model's rendering thread to avoid access violations of changed geometry.
     Q_INVOKABLE void setURL(const QUrl& url);
     const QUrl& getURL() const { return _url; }
 
     // new Scene/Engine rendering support
     void setVisibleInScene(bool newValue, std::shared_ptr<render::Scene> scene);
-    bool needsFixupInScene();
-    bool readyToAddToScene(RenderArgs* renderArgs = nullptr) {
-        return !_needsReload && isRenderable() && isActive() && isLoaded();
+    bool needsFixupInScene() const;
+    bool readyToAddToScene(RenderArgs* renderArgs = nullptr) const {
+        return !_needsReload && isRenderable() && isActive();
     }
     bool initWhenReady(render::ScenePointer scene);
     bool addToScene(std::shared_ptr<render::Scene> scene,
                     render::PendingChanges& pendingChanges,
-                    bool showCollisionHull = false);
+                    bool showCollisionHull = false) {
+        auto getters = render::Item::Status::Getters(0);
+        return addToScene(scene, pendingChanges, getters, showCollisionHull);
+    }
     bool addToScene(std::shared_ptr<render::Scene> scene,
                     render::PendingChanges& pendingChanges,
                     render::Item::Status::Getters& statusGetters,
                     bool showCollisionHull = false);
     void removeFromScene(std::shared_ptr<render::Scene> scene, render::PendingChanges& pendingChanges);
     void renderSetup(RenderArgs* args);
-    bool isRenderable() const { return !_meshStates.isEmpty() || (isActive() && _geometry->getMeshes().empty()); }
+    bool isRenderable() const { return !_meshStates.isEmpty() || (isActive() && getGeometry()->getGeometry()->getMeshes().empty()); }
 
     bool isVisible() const { return _isVisible; }
 
     void updateRenderItems();
-    AABox getPartBounds(int meshIndex, int partIndex, glm::vec3 modelPosition, glm::quat modelOrientation) const;
+    AABox getRenderableMeshBound() const;
 
     bool maybeStartBlender();
 
     /// Sets blended vertices computed in a separate thread.
-    void setBlendedVertices(int blendNumber, const QWeakPointer<NetworkGeometry>& geometry,
+    void setBlendedVertices(int blendNumber, const std::weak_ptr<NetworkGeometry>& geometry,
         const QVector<glm::vec3>& vertices, const QVector<glm::vec3>& normals);
 
-    bool isLoaded() const { return _geometry && _geometry->isLoaded(); }
-    bool isLoadedWithTextures() const { return _geometry && _geometry->isLoadedWithTextures(); }
+    bool isLoaded() const { return _geometry && _geometry->getGeometry(); }
+    bool isCollisionLoaded() const { return _collisionGeometry && _collisionGeometry->getGeometry(); }
 
     void setIsWireframe(bool isWireframe) { _isWireframe = isWireframe; }
     bool isWireframe() const { return _isWireframe; }
@@ -123,12 +128,26 @@ public:
     virtual void updateClusterMatrices(glm::vec3 modelPosition, glm::quat modelOrientation);
 
     /// Returns a reference to the shared geometry.
-    const QSharedPointer<NetworkGeometry>& getGeometry() const { return _geometry; }
+    const NetworkGeometry::Pointer& getGeometry() const { return _geometry; }
+    /// Returns a reference to the shared collision geometry.
+    const NetworkGeometry::Pointer& getCollisionGeometry() const { return _collisionGeometry; }
 
-    bool isActive() const { return _geometry && _geometry->isLoaded(); }
+    const QVariantMap getTextures() const { assert(isLoaded()); return _geometry->getGeometry()->getTextures(); }
+    void setTextures(const QVariantMap& textures);
 
-    Q_INVOKABLE void setTextureWithNameToURL(const QString& name, const QUrl& url)
-        { _geometry->setTextureWithNameToURL(name, url); }
+    /// Provided as a convenience, will crash if !isLoaded()
+    // And so that getGeometry() isn't chained everywhere
+    const FBXGeometry& getFBXGeometry() const { assert(isLoaded()); return getGeometry()->getGeometry()->getGeometry(); }
+    /// Provided as a convenience, will crash if !isCollisionLoaded()
+    const FBXGeometry& getCollisionFBXGeometry() const { assert(isCollisionLoaded()); return getCollisionGeometry()->getGeometry()->getGeometry(); }
+
+    // Set the model to use for collisions.
+    // Should only be called from the model's rendering thread to avoid access violations of changed geometry.
+    Q_INVOKABLE void setCollisionModelURL(const QUrl& url);
+    const QUrl& getCollisionURL() const { return _collisionUrl; }
+
+
+    bool isActive() const { return isLoaded(); }
 
     bool convexHullContains(glm::vec3 point);
 
@@ -142,13 +161,6 @@ public:
     bool findRayIntersectionAgainstSubMeshes(const glm::vec3& origin, const glm::vec3& direction, float& distance,
                                              BoxFace& face, glm::vec3& surfaceNormal, 
                                              QString& extraInfo, bool pickAgainstTriangles = false);
-
-    // Set the model to use for collisions
-    Q_INVOKABLE void setCollisionModelURL(const QUrl& url);
-    const QUrl& getCollisionURL() const { return _collisionUrl; }
-
-    /// Returns a reference to the shared collision geometry.
-    const QSharedPointer<NetworkGeometry> getCollisionGeometry(bool delayLoad = false);
 
     void setOffset(const glm::vec3& offset);
     const glm::vec3& getOffset() const { return _offset; }
@@ -200,8 +212,6 @@ public:
 
     void setScale(const glm::vec3& scale);
     const glm::vec3& getScale() const { return _scale; }
-
-    void enqueueLocationChange();
 
     /// enables/disables scale to fit behavior, the model will be automatically scaled to the specified largest dimension
     bool getIsScaledToFit() const { return _scaledToFit; } /// is model scaled to fit
@@ -257,8 +267,7 @@ protected:
     /// \return true if joint exists
     bool getJointPosition(int jointIndex, glm::vec3& position) const;
 
-    QSharedPointer<NetworkGeometry> _geometry;
-    void setGeometry(const QSharedPointer<NetworkGeometry>& newGeometry);
+    NetworkGeometry::Pointer _geometry;
 
     glm::vec3 _translation;
     glm::quat _rotation;
@@ -325,7 +334,7 @@ protected:
     void deleteGeometry();
     void initJointTransforms();
 
-    QSharedPointer<NetworkGeometry> _collisionGeometry;
+    NetworkGeometry::Pointer _collisionGeometry;
 
     float _pupilDilation;
     QVector<float> _blendshapeCoefficients;
@@ -371,21 +380,26 @@ protected:
     bool _renderCollisionHull;
 
 
-    QSet<std::shared_ptr<MeshPartPayload>> _renderItemsSet;
-    QMap<render::ItemID, render::PayloadPointer> _renderItems;
+    QSet<std::shared_ptr<MeshPartPayload>> _collisionRenderItemsSet;
+    QMap<render::ItemID, render::PayloadPointer> _collisionRenderItems;
+
+    QSet<std::shared_ptr<ModelMeshPartPayload>> _modelMeshRenderItemsSet;
+    QMap<render::ItemID, render::PayloadPointer> _modelMeshRenderItems;
+
     bool _readyWhenAdded { false };
     bool _needsReload { true };
     bool _needsUpdateClusterMatrices { true };
-    bool _needsUpdateTransparentTextures { true };
-    bool _hasTransparentTextures { false };
     bool _showCollisionHull { false };
+    mutable bool _needsUpdateTextures { true };
 
     friend class ModelMeshPartPayload;
     RigPointer _rig;
+
+    uint32_t _deleteGeometryCounter { 0 };
 };
 
 Q_DECLARE_METATYPE(ModelPointer)
-Q_DECLARE_METATYPE(QWeakPointer<NetworkGeometry>)
+Q_DECLARE_METATYPE(std::weak_ptr<NetworkGeometry>)
 
 /// Handle management of pending models that need blending
 class ModelBlender : public QObject, public Dependency {
@@ -398,7 +412,7 @@ public:
     void noteRequiresBlend(ModelPointer model);
 
 public slots:
-    void setBlendedVertices(ModelPointer model, int blendNumber, const QWeakPointer<NetworkGeometry>& geometry,
+    void setBlendedVertices(ModelPointer model, int blendNumber, const std::weak_ptr<NetworkGeometry>& geometry,
         const QVector<glm::vec3>& vertices, const QVector<glm::vec3>& normals);
 
 private:

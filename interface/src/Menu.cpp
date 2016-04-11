@@ -139,14 +139,13 @@ Menu::Menu() {
     QObject::connect(nodeList.data(), &NodeList::canRezChanged, assetServerAction, &QAction::setEnabled);
     assetServerAction->setEnabled(nodeList->getThisNodeCanRez());
 
-    // Edit > Reload All Content [advanced]
-    addActionToQMenuAndActionHash(editMenu, MenuOption::ReloadContent, 0, qApp, SLOT(reloadResourceCaches()),
-                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
-
-
     // Edit > Package Model... [advanced]
     addActionToQMenuAndActionHash(editMenu, MenuOption::PackageModel, 0,
         qApp, SLOT(packageModel()),
+                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
+
+    // Edit > Reload All Content [advanced]
+    addActionToQMenuAndActionHash(editMenu, MenuOption::ReloadContent, 0, qApp, SLOT(reloadResourceCaches()),
                                   QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
 
 
@@ -228,12 +227,12 @@ Menu::Menu() {
     // View > First Person
     cameraModeGroup->addAction(addCheckableActionToQMenuAndActionHash(viewMenu,
         MenuOption::FirstPerson, 0, // QML Qt:: Key_P
-        false, qApp, SLOT(cameraMenuChanged())));
+        true, qApp, SLOT(cameraMenuChanged())));
 
     // View > Third Person
     cameraModeGroup->addAction(addCheckableActionToQMenuAndActionHash(viewMenu,
         MenuOption::ThirdPerson, 0,
-        true, qApp, SLOT(cameraMenuChanged())));
+        false, qApp, SLOT(cameraMenuChanged())));
 
     // View > Mirror
     cameraModeGroup->addAction(addCheckableActionToQMenuAndActionHash(viewMenu,
@@ -467,7 +466,7 @@ Menu::Menu() {
         avatar, SLOT(setEnableMeshVisible(bool)));
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::DisableEyelidAdjustment, 0, false);
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::TurnWithHead, 0, false);
-    addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::UseAnimPreAndPostRotations, 0, false,
+    addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::UseAnimPreAndPostRotations, 0, true,
         avatar, SLOT(setUseAnimPreAndPostRotations(bool)));
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::EnableInverseKinematics, 0, true,
         avatar, SLOT(setEnableInverseKinematics(bool)));
@@ -540,6 +539,9 @@ Menu::Menu() {
     addCheckableActionToQMenuAndActionHash(timingMenu, MenuOption::PipelineWarnings);
     addCheckableActionToQMenuAndActionHash(timingMenu, MenuOption::LogExtraTimings);
     addCheckableActionToQMenuAndActionHash(timingMenu, MenuOption::SuppressShortTimings);
+    addCheckableActionToQMenuAndActionHash(timingMenu, MenuOption::SupressDeadlockWatchdogStatus, 0, false,
+        qApp, SLOT(toggleSuppressDeadlockWatchdogStatus(bool)));
+
 
     // Developer > Audio >>>
     MenuWrapper* audioDebugMenu = developerMenu->addMenu("Audio");

@@ -516,7 +516,7 @@ int EntityItem::readEntityDataFromBuffer(const unsigned char* data, int bytesLef
     EntityTreePointer tree = getTree();
     if (tree && tree->isDeletedEntity(_id)) {
         #ifdef WANT_DEBUG
-            qDebug() << "Recieved packet for previously deleted entity [" << _id << "] ignoring. "
+            qDebug() << "Received packet for previously deleted entity [" << _id << "] ignoring. "
                         "(inside " << __FUNCTION__ << ")";
         #endif
         ignoreServerPacket = true;
@@ -1008,6 +1008,10 @@ EntityTreePointer EntityItem::getTree() const {
     EntityTreeElementPointer containingElement = getElement();
     EntityTreePointer tree = containingElement ? containingElement->getTree() : nullptr;
     return tree;
+}
+
+SpatialParentTree* EntityItem::getParentTree() const {
+    return getTree().get();
 }
 
 bool EntityItem::wantTerseEditLogging() const {
@@ -1969,12 +1973,42 @@ QList<EntityActionPointer> EntityItem::getActionsOfType(EntityActionType typeToG
     return result;
 }
 
-void EntityItem::locationChanged() {
+void EntityItem::locationChanged(bool tellPhysics) {
     requiresRecalcBoxes();
-    SpatiallyNestable::locationChanged(); // tell all the children, also
+    if (tellPhysics) {
+        _dirtyFlags |= Simulation::DIRTY_TRANSFORM;
+    }
+    EntityTreePointer tree = getTree();
+    if (tree) {
+        tree->entityChanged(getThisPointer());
+    }
+    SpatiallyNestable::locationChanged(tellPhysics); // tell all the children, also
 }
 
 void EntityItem::dimensionsChanged() {
     requiresRecalcBoxes();
     SpatiallyNestable::dimensionsChanged(); // Do what you have to do
+}
+
+void EntityItem::globalizeProperties(EntityItemProperties& properties, const QString& messageTemplate, const glm::vec3& offset) const {
+    // TODO -- combine this with convertLocationToScriptSemantics
+    bool success;
+    auto globalPosition = getPosition(success);
+    if (success) {
+        properties.setPosition(globalPosition + offset);
+        properties.setRotation(getRotation());
+        properties.setDimensions(getDimensions());
+        // Should we do velocities and accelerations, too? This could end up being quite involved, which is why the method exists.
+    } else {
+        properties.setPosition(getQueryAACube().calcCenter() + offset); // best we can do
+    }
+    if (!messageTemplate.isEmpty()) {
+        QString name = properties.getName();
+        if (name.isEmpty()) {
+            name = EntityTypes::getEntityTypeName(properties.getType());
+        }
+        qCWarning(entities) << messageTemplate.arg(getEntityItemID().toString()).arg(name).arg(properties.getParentID().toString());
+    }
+    QUuid empty;
+    properties.setParentID(empty);
 }

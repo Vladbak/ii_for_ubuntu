@@ -373,32 +373,34 @@ void MyAvatar::simulate(float deltaTime) {
     EntityTreeRenderer* entityTreeRenderer = qApp->getEntities();
     EntityTreePointer entityTree = entityTreeRenderer ? entityTreeRenderer->getTree() : nullptr;
     if (entityTree) {
-        auto now = usecTimestampNow();
-        EntityEditPacketSender* packetSender = qApp->getEntityEditPacketSender();
-        MovingEntitiesOperator moveOperator(entityTree);
-        forEachDescendant([&](SpatiallyNestablePointer object) {
-            // if the queryBox has changed, tell the entity-server
-            if (object->computePuffedQueryAACube() && object->getNestableType() == NestableType::Entity) {
-                EntityItemPointer entity = std::static_pointer_cast<EntityItem>(object);
-                bool success;
-                AACube newCube = entity->getQueryAACube(success);
-                if (success) {
-                    moveOperator.addEntityToMoveList(entity, newCube);
+        entityTree->withWriteLock([&] {
+            auto now = usecTimestampNow();
+            EntityEditPacketSender* packetSender = qApp->getEntityEditPacketSender();
+            MovingEntitiesOperator moveOperator(entityTree);
+            forEachDescendant([&](SpatiallyNestablePointer object) {
+                // if the queryBox has changed, tell the entity-server
+                if (object->computePuffedQueryAACube() && object->getNestableType() == NestableType::Entity) {
+                    EntityItemPointer entity = std::static_pointer_cast<EntityItem>(object);
+                    bool success;
+                    AACube newCube = entity->getQueryAACube(success);
+                    if (success) {
+                        moveOperator.addEntityToMoveList(entity, newCube);
+                    }
+                    if (packetSender) {
+                        EntityItemProperties properties = entity->getProperties();
+                        properties.setQueryAACubeDirty();
+                        properties.setLastEdited(now);
+                        packetSender->queueEditEntityMessage(PacketType::EntityEdit, entity->getID(), properties);
+                        entity->setLastBroadcast(usecTimestampNow());
+                    }
                 }
-                if (packetSender) {
-                    EntityItemProperties properties = entity->getProperties();
-                    properties.setQueryAACubeDirty();
-                    properties.setLastEdited(now);
-                    packetSender->queueEditEntityMessage(PacketType::EntityEdit, entity->getID(), properties);
-                    entity->setLastBroadcast(usecTimestampNow());
-                }
+            });
+            // also update the position of children in our local octree
+            if (moveOperator.hasMovingEntities()) {
+                PerformanceTimer perfTimer("recurseTreeWithOperator");
+                entityTree->recurseTreeWithOperator(&moveOperator);
             }
         });
-        // also update the position of children in our local octree
-        if (moveOperator.hasMovingEntities()) {
-            PerformanceTimer perfTimer("recurseTreeWithOperator");
-            entityTree->recurseTreeWithOperator(&moveOperator);
-        }
     }
 }
 
@@ -418,7 +420,7 @@ void MyAvatar::updateFromHMDSensorMatrix(const glm::mat4& hmdSensorMatrix) {
     _hmdSensorFacing = getFacingDir2D(_hmdSensorOrientation);
 }
 
-// best called at end of main loop, just before rendering.
+// best called at end of main loop, after physics.
 // update sensor to world matrix from current body position and hmd sensor.
 // This is so the correct camera can be used for rendering.
 void MyAvatar::updateSensorToWorldMatrix() {
@@ -897,7 +899,9 @@ void MyAvatar::updateLookAtTargetAvatar() {
                     // Scale by proportional differences between avatar and human.
                     float humanEyeSeparationInModelSpace = glm::length(humanLeftEye - humanRightEye) * ipdScale;
                     float avatarEyeSeparation = glm::length(avatarLeftEye - avatarRightEye);
-                    gazeOffset = gazeOffset * humanEyeSeparationInModelSpace / avatarEyeSeparation;
+                    if (avatarEyeSeparation > 0.0f) {
+                        gazeOffset = gazeOffset * humanEyeSeparationInModelSpace / avatarEyeSeparation;
+                    }
                 }
 
                 // And now we can finally add that offset to the camera.
@@ -1087,24 +1091,32 @@ static controller::Pose applyLowVelocityFilter(const controller::Pose& oldPose, 
     return finalPose;
 }
 
-void MyAvatar::setHandControllerPosesInWorldFrame(const controller::Pose& left, const controller::Pose& right) {
+void MyAvatar::setHandControllerPosesInSensorFrame(const controller::Pose& left, const controller::Pose& right) {
     if (controller::InputDevice::getLowVelocityFilter()) {
-        auto oldLeftPose = getLeftHandControllerPoseInWorldFrame();
-        auto oldRightPose = getRightHandControllerPoseInWorldFrame();
-        _leftHandControllerPoseInWorldFrameCache.set(applyLowVelocityFilter(oldLeftPose, left));
-        _rightHandControllerPoseInWorldFrameCache.set(applyLowVelocityFilter(oldRightPose, right));
+        auto oldLeftPose = getLeftHandControllerPoseInSensorFrame();
+        auto oldRightPose = getRightHandControllerPoseInSensorFrame();
+        _leftHandControllerPoseInSensorFrameCache.set(applyLowVelocityFilter(oldLeftPose, left));
+        _rightHandControllerPoseInSensorFrameCache.set(applyLowVelocityFilter(oldRightPose, right));
     } else {
-        _leftHandControllerPoseInWorldFrameCache.set(left);
-        _rightHandControllerPoseInWorldFrameCache.set(right);
+        _leftHandControllerPoseInSensorFrameCache.set(left);
+        _rightHandControllerPoseInSensorFrameCache.set(right);
     }
 }
 
+controller::Pose MyAvatar::getLeftHandControllerPoseInSensorFrame() const {
+    return _leftHandControllerPoseInSensorFrameCache.get();
+}
+
+controller::Pose MyAvatar::getRightHandControllerPoseInSensorFrame() const {
+    return _rightHandControllerPoseInSensorFrameCache.get();
+}
+
 controller::Pose MyAvatar::getLeftHandControllerPoseInWorldFrame() const {
-    return _leftHandControllerPoseInWorldFrameCache.get();
+    return _leftHandControllerPoseInSensorFrameCache.get().transform(getSensorToWorldMatrix());
 }
 
 controller::Pose MyAvatar::getRightHandControllerPoseInWorldFrame() const {
-    return _rightHandControllerPoseInWorldFrameCache.get();
+    return _rightHandControllerPoseInSensorFrameCache.get().transform(getSensorToWorldMatrix());
 }
 
 controller::Pose MyAvatar::getLeftHandControllerPoseInAvatarFrame() const {
@@ -1262,8 +1274,8 @@ void MyAvatar::setVisibleInSceneIfReady(Model* model, render::ScenePointer scene
 
 void MyAvatar::initHeadBones() {
     int neckJointIndex = -1;
-    if (_skeletonModel->getGeometry()) {
-        neckJointIndex = _skeletonModel->getGeometry()->getFBXGeometry().neckJointIndex;
+    if (_skeletonModel->isLoaded()) {
+        neckJointIndex = _skeletonModel->getFBXGeometry().neckJointIndex;
     }
     if (neckJointIndex == -1) {
         return;

@@ -45,20 +45,19 @@ template <> void payloadRender(const MeshPartPayload::Pointer& payload, RenderAr
 }
 }
 
-MeshPartPayload::MeshPartPayload(model::MeshPointer mesh, int partIndex, model::MaterialPointer material, const Transform& transform, const Transform& offsetTransform) {
+MeshPartPayload::MeshPartPayload(const std::shared_ptr<const model::Mesh>& mesh, int partIndex, model::MaterialPointer material, const Transform& transform, const Transform& offsetTransform) {
 
     updateMeshPart(mesh, partIndex);
     updateMaterial(material);
     updateTransform(transform, offsetTransform);
 }
 
-void MeshPartPayload::updateMeshPart(model::MeshPointer drawMesh, int partIndex) {
+void MeshPartPayload::updateMeshPart(const std::shared_ptr<const model::Mesh>& drawMesh, int partIndex) {
     _drawMesh = drawMesh;
     if (_drawMesh) {
         auto vertexFormat = _drawMesh->getVertexFormat();
         _hasColorAttrib = vertexFormat->hasAttribute(gpu::Stream::COLOR);
         _drawPart = _drawMesh->getPartBuffer().get<model::Mesh::Part>(partIndex);
-
         _localBound = _drawMesh->evalPartBound(partIndex);
     }
 }
@@ -81,7 +80,7 @@ ItemKey MeshPartPayload::getKey() const {
 
     if (_drawMaterial) {
         auto matKey = _drawMaterial->getKey();
-        if (matKey.isTransparent() || matKey.isTransparentTexture() || matKey.isTransparentMap()) {
+        if (matKey.isTranslucent()) {
             builder.withTransparent();
         }
     }
@@ -100,7 +99,7 @@ ShapeKey MeshPartPayload::getShapeKey() const {
     }
 
     ShapeKey::Builder builder;
-    if (drawMaterialKey.isTransparent() || drawMaterialKey.isTransparentTexture() || drawMaterialKey.isTransparentMap()) {
+    if (drawMaterialKey.isTranslucent()) {
         builder.withTranslucent();
     }
     if (drawMaterialKey.isNormalMap()) {
@@ -320,7 +319,9 @@ ModelMeshPartPayload::ModelMeshPartPayload(Model* model, int _meshIndex, int par
     _model(model),
     _meshIndex(_meshIndex),
     _shapeID(shapeIndex) {
-    auto& modelMesh = _model->_geometry->getMeshes().at(_meshIndex)->_mesh;
+
+    assert(_model && _model->isLoaded());
+    auto& modelMesh = _model->getGeometry()->getGeometry()->getMeshes().at(_meshIndex);
     updateMeshPart(modelMesh, partIndex);
 
     updateTransform(transform, offsetTransform);
@@ -328,27 +329,45 @@ ModelMeshPartPayload::ModelMeshPartPayload(Model* model, int _meshIndex, int par
 }
 
 void ModelMeshPartPayload::initCache() {
+    assert(_model->isLoaded());
+
     if (_drawMesh) {
         auto vertexFormat = _drawMesh->getVertexFormat();
         _hasColorAttrib = vertexFormat->hasAttribute(gpu::Stream::COLOR);
         _isSkinned = vertexFormat->hasAttribute(gpu::Stream::SKIN_CLUSTER_WEIGHT) && vertexFormat->hasAttribute(gpu::Stream::SKIN_CLUSTER_INDEX);
 
-
-        const FBXGeometry& geometry = _model->_geometry->getFBXGeometry();
+        const FBXGeometry& geometry = _model->getFBXGeometry();
         const FBXMesh& mesh = geometry.meshes.at(_meshIndex);
+
         _isBlendShaped = !mesh.blendshapes.isEmpty();
     }
 
-    auto networkMaterial = _model->_geometry->getShapeMaterial(_shapeID);
+    auto networkMaterial = _model->getGeometry()->getGeometry()->getShapeMaterial(_shapeID);
     if (networkMaterial) {
-        _drawMaterial = networkMaterial->_material;
+        _drawMaterial = networkMaterial;
     };
 
 }
 
 
 void ModelMeshPartPayload::notifyLocationChanged() {
-    _model->_needsUpdateClusterMatrices = true;
+
+}
+
+void ModelMeshPartPayload::updateTransformForSkinnedMesh(const Transform& transform, const Transform& offsetTransform, const QVector<glm::mat4>& clusterMatrices) {
+    ModelMeshPartPayload::updateTransform(transform, offsetTransform);
+
+    if (clusterMatrices.size() > 0) {
+        _worldBound = AABox();
+        for (auto& clusterMatrix : clusterMatrices) {
+            AABox clusterBound = _localBound;
+            clusterBound.transform(clusterMatrix);
+            _worldBound += clusterBound;
+        }
+
+        // clusterMatrix has world rotation but not world translation.
+        _worldBound.translate(transform.getTranslation());
+    }
 }
 
 ItemKey ModelMeshPartPayload::getKey() const {
@@ -365,7 +384,7 @@ ItemKey ModelMeshPartPayload::getKey() const {
 
     if (_drawMaterial) {
         auto matKey = _drawMaterial->getKey();
-        if (matKey.isTransparent() || matKey.isTransparentTexture() || matKey.isTransparentMap()) {
+        if (matKey.isTranslucent()) {
             builder.withTransparent();
         }
     }
@@ -373,15 +392,10 @@ ItemKey ModelMeshPartPayload::getKey() const {
     return builder.build();
 }
 
-Item::Bound ModelMeshPartPayload::getBound() const {
-    // NOTE: we can't cache this bounds because we need to handle the case of a moving
-    // entity or mesh part.
-    return _model->getPartBounds(_meshIndex, _partIndex, _transform.getTranslation(), _transform.getRotation());
-}
-
 ShapeKey ModelMeshPartPayload::getShapeKey() const {
-    const FBXGeometry& geometry = _model->_geometry->getFBXGeometry();
-    const std::vector<std::unique_ptr<NetworkMesh>>& networkMeshes = _model->_geometry->getMeshes();
+    assert(_model->isLoaded());
+    const FBXGeometry& geometry = _model->getFBXGeometry();
+    const auto& networkMeshes = _model->getGeometry()->getGeometry()->getMeshes();
 
     // guard against partially loaded meshes
     if (_meshIndex >= (int)networkMeshes.size() || _meshIndex >= (int)geometry.meshes.size() || _meshIndex >= (int)_model->_meshStates.size()) {
@@ -412,8 +426,7 @@ ShapeKey ModelMeshPartPayload::getShapeKey() const {
         drawMaterialKey = _drawMaterial->getKey();
     }
 
-    bool isTranslucent =
-        drawMaterialKey.isTransparent() || drawMaterialKey.isTransparentTexture() || drawMaterialKey.isTransparentMap();
+    bool isTranslucent = drawMaterialKey.isTranslucent();
     bool hasTangents = drawMaterialKey.isNormalMap() && !mesh.tangents.isEmpty();
     bool hasSpecular = drawMaterialKey.isMetallicMap();
     bool hasLightmap = drawMaterialKey.isLightmapMap();
@@ -506,26 +519,6 @@ void ModelMeshPartPayload::render(RenderArgs* args) const {
     if (!getShapeKey().isValid()) {
         return;
     }
-
-    // render the part bounding box
-#ifdef DEBUG_BOUNDING_PARTS
-    {
-        AABox partBounds = getPartBounds(_meshIndex, partIndex);
-
-        glm::vec4 cubeColor(1.0f, 1.0f, 0.0f, 1.0f);
-        if (isSkinned) {
-            cubeColor = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f);
-        } else if (args->_viewFrustum->boxIntersectsFrustum(partBounds)) {
-            cubeColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f);
-        }
-
-        Transform transform;
-        transform.setTranslation(partBounds.calcCenter());
-        transform.setScale(partBounds.getDimensions());
-        batch.setModelTransform(transform);
-        DependencyManager::get<GeometryCache>()->renderWireCube(batch, 1.0f, cubeColor);
-    }
-#endif //def DEBUG_BOUNDING_PARTS
 
     auto locations =  args->_pipeline->locations;
     assert(locations);

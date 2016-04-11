@@ -59,7 +59,7 @@ class DisplayPlugin : public Plugin {
     Q_OBJECT
     using Parent = Plugin;
 public:
-    void activate() override;
+    bool activate() override;
     void deactivate() override;
     virtual bool isHmd() const { return false; }
     virtual int getHmdScreen() const { return -1; }
@@ -73,6 +73,9 @@ public:
     /// or power-save mode is active.  For HMDs it may reflect a sensor indicating
     /// whether the HMD is being worn
     virtual bool isDisplayVisible() const { return false; }
+
+    virtual QString getPreferredAudioInDevice() const { return QString(); }
+    virtual QString getPreferredAudioOutDevice() const { return QString(); }
 
     // Rendering support
 
@@ -122,7 +125,7 @@ public:
     }
 
     // will query the underlying hmd api to compute the most recent head pose
-    virtual void updateHeadPose(uint32_t frameIndex) {}
+    virtual void beginFrameRender(uint32_t frameIndex) {}
 
     // returns a copy of the most recent head pose, computed via updateHeadPose
     virtual glm::mat4 getHeadPose() const {
@@ -141,6 +144,8 @@ public:
     virtual float devicePixelRatio() { return 1.0f; }
     virtual float presentRate() { return -1.0f; }
     uint32_t presentCount() const { return _presentedFrameIndex; }
+
+    virtual void cycleDebugOutput() {}
 
     static const QString& MENU_PATH();
 

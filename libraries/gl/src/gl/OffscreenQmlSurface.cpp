@@ -23,6 +23,7 @@
 #include <PerfStat.h>
 #include <DependencyManager.h>
 #include <NumericalConstants.h>
+#include <Finally.h>
 
 #include "OffscreenGLCanvas.h"
 #include "GLEscrow.h"
@@ -69,7 +70,7 @@ public:
     virtual bool event(QEvent *e) override;
 
 protected:
-    class Queue : public QQueue<QEvent*> {
+    class Queue : private QQueue<QEvent*> {
     public:
         void add(QEvent::Type type);
         QEvent* take();
@@ -84,6 +85,7 @@ protected:
     Queue _queue;
     QMutex _mutex;
     QWaitCondition _waitCondition;
+    std::atomic<bool> _rendering { false };
 
 private:
     // Event-driven methods
@@ -132,10 +134,11 @@ QEvent* OffscreenQmlRenderThread::Queue::take() {
 }
 
 OffscreenQmlRenderThread::OffscreenQmlRenderThread(OffscreenQmlSurface* surface, QOpenGLContext* shareContext) : _surface(surface) {
+    qDebug() << "Building QML Renderer";
     if (!_canvas.create(shareContext)) {
-        static const char* error = "Failed to create OffscreenGLCanvas";
-        qWarning() << error;
-        throw error;
+        qWarning("Failed to create OffscreenGLCanvas");
+        _quit = true;
+        return;
     };
 
     _renderControl = new QMyQuickRenderControl();
@@ -158,6 +161,8 @@ OffscreenQmlRenderThread::OffscreenQmlRenderThread(OffscreenQmlSurface* surface,
 }
 
 void OffscreenQmlRenderThread::run() {
+    qDebug() << "Starting QML Renderer thread";
+
     while (!_quit) {
         QEvent* e = _queue.take();
         event(e);
@@ -188,34 +193,32 @@ void OffscreenQmlRenderThread::setupFbo() {
     using namespace oglplus;
     _textures.setSize(_size);
 
-    // Before making any ogl calls, clear any outstanding errors
-    // FIXME: Something upstream is polluting the context with a GL_INVALID_ENUM,
-    //        likely from glewExperimental = true
-    GLenum err = glGetError();
-    if (err != GL_NO_ERROR) {
-        qDebug() << "Clearing outstanding GL error to set up QML FBO:" << glewGetErrorString(err);
+    try {
+        _depthStencil.reset(new Renderbuffer());
+        Context::Bound(Renderbuffer::Target::Renderbuffer, *_depthStencil)
+            .Storage(
+            PixelDataInternalFormat::DepthComponent,
+            _size.x, _size.y);
+
+        _fbo.reset(new Framebuffer());
+        _fbo->Bind(Framebuffer::Target::Draw);
+        _fbo->AttachRenderbuffer(Framebuffer::Target::Draw,
+            FramebufferAttachment::Depth, *_depthStencil);
+        DefaultFramebuffer().Bind(Framebuffer::Target::Draw);
+    } catch (oglplus::Error& error) {
+        qWarning() << "OpenGL error in QML render setup: " << error.what();
     }
-
-    _depthStencil.reset(new Renderbuffer());
-    Context::Bound(Renderbuffer::Target::Renderbuffer, *_depthStencil)
-        .Storage(
-        PixelDataInternalFormat::DepthComponent,
-        _size.x, _size.y);
-
-    _fbo.reset(new Framebuffer());
-    _fbo->Bind(Framebuffer::Target::Draw);
-    _fbo->AttachRenderbuffer(Framebuffer::Target::Draw,
-        FramebufferAttachment::Depth, *_depthStencil);
-    DefaultFramebuffer().Bind(Framebuffer::Target::Draw);
 }
 
 void OffscreenQmlRenderThread::init() {
+    qDebug() << "Initializing QML Renderer";
+
     connect(_renderControl, &QQuickRenderControl::renderRequested, _surface, &OffscreenQmlSurface::requestRender);
     connect(_renderControl, &QQuickRenderControl::sceneChanged, _surface, &OffscreenQmlSurface::requestUpdate);
 
     if (!_canvas.makeCurrent()) {
-        // Failed to make GL context current, this OffscreenQmlSurface is basically dead
         qWarning("Failed to make context current on QML Renderer Thread");
+        _quit = true;
         return;
     }
 
@@ -271,15 +274,25 @@ void OffscreenQmlRenderThread::resize() {
 }
 
 void OffscreenQmlRenderThread::render() {
-    if (_surface->_paused) {
+    // Ensure we always release the main thread
+    Finally releaseMainThread([this] {
         _waitCondition.wakeOne();
+    });
+
+    if (_surface->_paused) {
         return;
     }
 
-    QMutexLocker locker(&_mutex);
-    _renderControl->sync();
-    _waitCondition.wakeOne();
-    locker.unlock();
+    _rendering = true;
+    Finally unmarkRenderingFlag([this] {
+        _rendering = false;
+    });
+
+    {
+        QMutexLocker locker(&_mutex);
+        _renderControl->sync();
+        releaseMainThread.trigger();
+    }
 
     using namespace oglplus;
 
@@ -287,24 +300,37 @@ void OffscreenQmlRenderThread::render() {
 
     try {
         PROFILE_RANGE("qml_render")
-            TexturePtr texture = _textures.getNextTexture();
-        _fbo->Bind(Framebuffer::Target::Draw);
-        _fbo->AttachTexture(Framebuffer::Target::Draw, FramebufferAttachment::Color, *texture, 0);
-        _fbo->Complete(Framebuffer::Target::Draw);
+
+        TexturePtr texture = _textures.getNextTexture();
+
+        try {
+            _fbo->Bind(Framebuffer::Target::Draw);
+            _fbo->AttachTexture(Framebuffer::Target::Draw, FramebufferAttachment::Color, *texture, 0);
+            _fbo->Complete(Framebuffer::Target::Draw);
+        } catch (oglplus::Error& error) {
+            qWarning() << "OpenGL error in QML render: " << error.what();
+
+            // In case we are failing from a failed setupFbo, reset fbo before next render
+            setupFbo();
+            throw;
+        }
+
         {
+            PROFILE_RANGE("qml_render->rendercontrol")
             _renderControl->render();
             // FIXME The web browsers seem to be leaving GL in an error state.
             // Need a debug context with sync logging to figure out why.
             // for now just clear the errors
             glGetError();
         }
+
         // FIXME probably unecessary
         DefaultFramebuffer().Bind(Framebuffer::Target::Draw);
         _quickWindow->resetOpenGLState();
         _escrow.submit(GetName(*texture));
         _lastRenderTime = usecTimestampNow();
     } catch (std::runtime_error& error) {
-        qWarning() << "Failed to render QML " << error.what();
+        qWarning() << "Failed to render QML: " << error.what();
     }
 }
 
@@ -339,6 +365,8 @@ void OffscreenQmlSurface::onAboutToQuit() {
 }
 
 void OffscreenQmlSurface::create(QOpenGLContext* shareContext) {
+    qDebug() << "Building QML surface";
+
     _renderer = new OffscreenQmlRenderThread(this, shareContext);
     _renderer->moveToThread(_renderer);
     _renderer->setObjectName("QML Renderer Thread");
@@ -379,8 +407,6 @@ void OffscreenQmlSurface::resize(const QSize& newSize_) {
                 std::max(static_cast<int>(scale * newSize.width()), 10),
                 std::max(static_cast<int>(scale * newSize.height()), 10));
     }
-
-
 
     QSize currentSize = _renderer->_quickWindow->geometry().size();
     if (newSize == currentSize) {
@@ -492,7 +518,12 @@ QObject* OffscreenQmlSurface::finishQmlLoad(std::function<void(QQmlContext*, QOb
 }
 
 void OffscreenQmlSurface::updateQuick() {
-    if (!_renderer || !_renderer->allowNewFrame(_maxFps)) {
+    // If we're 
+    //   a) not set up
+    //   b) already rendering a frame
+    //   c) rendering too fast
+    // then skip this 
+    if (!_renderer || _renderer->_rendering || !_renderer->allowNewFrame(_maxFps)) {
         return;
     }
 
@@ -502,11 +533,11 @@ void OffscreenQmlSurface::updateQuick() {
     }
 
     if (_render) {
+        PROFILE_RANGE(__FUNCTION__);
         // Lock the GUI size while syncing
         QMutexLocker locker(&(_renderer->_mutex));
         _renderer->_queue.add(RENDER);
         _renderer->_waitCondition.wait(&(_renderer->_mutex));
-
         _render = false;
     }
 
