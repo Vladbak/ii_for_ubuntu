@@ -10,6 +10,7 @@
 #include "DisplayPlugin.h"
 
 #include <condition_variable>
+#include <memory>
 
 #include <QtCore/QTimer>
 #include <QtGui/QImage>
@@ -18,6 +19,7 @@
 #include <SimpleMovingAverage.h>
 #include <gl/OglplusHelpers.h>
 #include <gl/GLEscrow.h>
+#include <shared/RateCounter.h>
 
 #define THREADED_PRESENT 1
 
@@ -41,7 +43,6 @@ public:
 
     void submitSceneTexture(uint32_t frameIndex, const gpu::TexturePointer& sceneTexture) override;
     void submitOverlayTexture(const gpu::TexturePointer& overlayTexture) override;
-    float presentRate() override;
 
     glm::uvec2 getRecommendedRenderSize() const override {
         return getSurfacePixels();
@@ -52,6 +53,12 @@ public:
     }
 
     QImage getScreenshot() const override;
+
+    float presentRate() const override;
+
+    float newFramePresentRate() const override;
+
+    float droppedFrameRate() const override;
 
 protected:
 #if THREADED_PRESENT
@@ -64,6 +71,7 @@ protected:
     glm::uvec2 getSurfacePixels() const;
 
     void compositeLayers();
+    virtual void compositeScene();
     virtual void compositeOverlay();
     virtual void compositePointer();
 
@@ -86,24 +94,27 @@ protected:
 
     void withMainThreadContext(std::function<void()> f) const;
 
+    void useProgram(const ProgramPtr& program);
     void present();
     void updateTextures();
-    void updateFramerate();
     void drawUnitQuad();
     void swapBuffers();
     void eyeViewport(Eye eye) const;
 
     virtual void updateFrameData();
 
+    QThread* _presentThread{ nullptr };
     ProgramPtr _program;
     int32_t _mvpUniform { -1 };
     int32_t _alphaUniform { -1 };
     ShapeWrapperPtr _plane;
 
     mutable Mutex _mutex;
-    SimpleMovingAverage _usecsPerFrame { 10 };
+    RateCounter<> _droppedFrameRate;
+    RateCounter<> _newFrameRate;
+    RateCounter<> _presentRate;
     QMap<gpu::TexturePointer, uint32_t> _sceneTextureToFrameIndexMap;
-    uint32_t _currentRenderFrameIndex { 0 };
+    uint32_t _currentPresentFrameIndex { 0 };
 
     gpu::TexturePointer _currentSceneTexture;
     gpu::TexturePointer _currentOverlayTexture;
@@ -122,6 +133,10 @@ protected:
 
     std::map<uint16_t, CursorData> _cursorsData;
     BasicFramebufferWrapperPtr _compositeFramebuffer;
+    bool _lockCurrentTexture { false };
+
+private:
+    ProgramPtr _activeProgram;
 };
 
 

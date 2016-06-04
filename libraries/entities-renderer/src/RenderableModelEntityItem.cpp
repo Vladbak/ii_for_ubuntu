@@ -48,13 +48,6 @@ RenderableModelEntityItem::~RenderableModelEntityItem() {
 
 void RenderableModelEntityItem::setModelURL(const QString& url) {
     auto& currentURL = getParsedModelURL();
-    if (_model && (currentURL != url)) {
-        // The machinery for updateModelBounds will give existing models the opportunity to fix their translation/rotation/scale/registration.
-        // The first two are straightforward, but the latter two have guards to make sure they don't happen after they've already been set.
-        // Here we reset those guards. This doesn't cause the entity values to change -- it just allows the model to match once it comes in.
-        _model->setScaleToFit(false, getDimensions());
-        _model->setSnapModelToRegistrationPoint(false, getRegistrationPoint());
-    }
     ModelEntityItem::setModelURL(url);
 
     if (currentURL != getParsedModelURL() || !_model) {
@@ -162,6 +155,27 @@ void RenderableModelEntityItem::remapTextures() {
     }
 }
 
+void RenderableModelEntityItem::doInitialModelSimulation() {
+    // The machinery for updateModelBounds will give existing models the opportunity to fix their
+    // translation/rotation/scale/registration.  The first two are straightforward, but the latter two have guards to
+    // make sure they don't happen after they've already been set.  Here we reset those guards. This doesn't cause the
+    // entity values to change -- it just allows the model to match once it comes in.
+    _model->setScaleToFit(false, getDimensions());
+    _model->setSnapModelToRegistrationPoint(false, getRegistrationPoint());
+
+    // now recalculate the bounds and registration
+    _model->setScaleToFit(true, getDimensions());
+    _model->setSnapModelToRegistrationPoint(true, getRegistrationPoint());
+    _model->setRotation(getRotation());
+    _model->setTranslation(getPosition());
+    {
+        PerformanceTimer perfTimer("_model->simulate");
+        _model->simulate(0.0f);
+    }
+    _needsInitialSimulation = false;
+}
+
+
 // TODO: we need a solution for changes to the postion/rotation/etc of a model...
 // this current code path only addresses that in this setup case... not the changing/moving case
 bool RenderableModelEntityItem::readyToAddToScene(RenderArgs* renderArgs) {
@@ -172,22 +186,12 @@ bool RenderableModelEntityItem::readyToAddToScene(RenderArgs* renderArgs) {
         getModel(renderer);
     }
     if (renderArgs && _model && _needsInitialSimulation && _model->isActive() && _model->isLoaded()) {
-        _model->setScaleToFit(true, getDimensions());
-        _model->setSnapModelToRegistrationPoint(true, getRegistrationPoint());
-        _model->setRotation(getRotation());
-        _model->setTranslation(getPosition());
-    
         // make sure to simulate so everything gets set up correctly for rendering
-        {
-            PerformanceTimer perfTimer("_model->simulate");
-            _model->simulate(0.0f);
-        }
-        _needsInitialSimulation = false;
-
+        doInitialModelSimulation();
         _model->renderSetup(renderArgs);
     }
     bool ready = !_needsInitialSimulation && _model && _model->readyToAddToScene(renderArgs);
-    return ready; 
+    return ready;
 }
 
 class RenderableModelEntityItemMeta {
@@ -274,11 +278,11 @@ bool RenderableModelEntityItem::getAnimationFrame() {
     if (!hasRenderAnimation() || !_jointMappingCompleted) {
         return false;
     }
-    AnimationPointer myAnimation = getAnimation(getRenderAnimationURL()); // FIXME: this could be optimized
-    if (myAnimation && myAnimation->isLoaded()) {
 
-        const QVector<FBXAnimationFrame>&  frames = myAnimation->getFramesReference(); // NOTE: getFrames() is too heavy
-        auto& fbxJoints = myAnimation->getGeometry().joints;
+    if (_animation && _animation->isLoaded()) {
+
+        const QVector<FBXAnimationFrame>&  frames = _animation->getFramesReference(); // NOTE: getFrames() is too heavy
+        auto& fbxJoints = _animation->getGeometry().joints;
 
         int frameCount = frames.size();
         if (frameCount > 0) {
@@ -339,26 +343,16 @@ void RenderableModelEntityItem::updateModelBounds() {
         return;
     }
     bool movingOrAnimating = isMovingRelativeToParent() || isAnimatingSomething();
+    glm::vec3 dimensions = getDimensions();
     if ((movingOrAnimating ||
          _needsInitialSimulation ||
          _needsJointSimulation ||
          _model->getTranslation() != getPosition() ||
-         _model->getScaleToFitDimensions() != getDimensions() ||
+         _model->getScaleToFitDimensions() != dimensions ||
          _model->getRotation() != getRotation() ||
          _model->getRegistrationPoint() != getRegistrationPoint())
         && _model->isActive() && _dimensionsInitialized) {
-        _model->setScaleToFit(true, getDimensions());
-        _model->setSnapModelToRegistrationPoint(true, getRegistrationPoint());
-        _model->setRotation(getRotation());
-        _model->setTranslation(getPosition());
-
-        // make sure to simulate so everything gets set up correctly for rendering
-        {
-            PerformanceTimer perfTimer("_model->simulate");
-            _model->simulate(0.0f);
-        }
-
-        _needsInitialSimulation = false;
+        doInitialModelSimulation();
         _needsJointSimulation = false;
     }
 }
@@ -518,6 +512,7 @@ void RenderableModelEntityItem::update(const quint64& now) {
     if (!_dimensionsInitialized && _model && _model->isActive()) {
         if (_model->isLoaded()) {
             EntityItemProperties properties;
+            properties.setLastEdited(usecTimestampNow()); // we must set the edit time since we're editing it
             auto extents = _model->getMeshExtents();
             properties.setDimensions(extents.maximum - extents.minimum);
             qCDebug(entitiesrenderer) << "Autoresizing:" << (!getName().isEmpty() ? getName() : getModelURL());
@@ -590,8 +585,7 @@ bool RenderableModelEntityItem::isReadyToComputeShape() {
             if (_needsInitialSimulation) {
                 // the _model's offset will be wrong until _needsInitialSimulation is false
                 PerformanceTimer perfTimer("_model->simulate");
-                _model->simulate(0.0f);
-                _needsInitialSimulation = false;
+                doInitialModelSimulation();
             }
 
             return true;
@@ -748,6 +742,7 @@ glm::vec3 RenderableModelEntityItem::getAbsoluteJointTranslationInObjectFrame(in
 bool RenderableModelEntityItem::setAbsoluteJointRotationInObjectFrame(int index, const glm::quat& rotation) {
     bool result = false;
     _jointDataLock.withWriteLock([&] {
+        _jointRotationsExplicitlySet = true;
         resizeJointArrays();
         if (index >= 0 && index < _absoluteJointRotationsInObjectFrame.size() &&
             _absoluteJointRotationsInObjectFrame[index] != rotation) {
@@ -764,6 +759,7 @@ bool RenderableModelEntityItem::setAbsoluteJointRotationInObjectFrame(int index,
 bool RenderableModelEntityItem::setAbsoluteJointTranslationInObjectFrame(int index, const glm::vec3& translation) {
     bool result = false;
     _jointDataLock.withWriteLock([&] {
+        _jointTranslationsExplicitlySet = true;
         resizeJointArrays();
         if (index >= 0 && index < _absoluteJointTranslationsInObjectFrame.size() &&
             _absoluteJointTranslationsInObjectFrame[index] != translation) {
@@ -803,6 +799,29 @@ void RenderableModelEntityItem::locationChanged(bool tellPhysics) {
     if (_model && _model->isActive()) {
         _model->setRotation(getRotation());
         _model->setTranslation(getPosition());
+
+        void* key = (void*)this;
+        std::weak_ptr<RenderableModelEntityItem> weakSelf =
+            std::static_pointer_cast<RenderableModelEntityItem>(getThisPointer());
+
+        AbstractViewStateInterface::instance()->pushPostUpdateLambda(key, [weakSelf]() {
+            auto self = weakSelf.lock();
+            if (!self) {
+                return;
+            }
+
+            render::ItemID myMetaItem = self->getMetaRenderItem();
+
+            if (myMetaItem == render::Item::INVALID_ITEM_ID) {
+                return;
+            }
+
+            render::ScenePointer scene = AbstractViewStateInterface::instance()->getMain3DScene();
+            render::PendingChanges pendingChanges;
+
+            pendingChanges.updateItem(myMetaItem);
+            scene->enqueuePendingChanges(pendingChanges);
+        });
     }
 }
 

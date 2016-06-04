@@ -16,6 +16,7 @@
 
 #include <SettingHandle.h>
 #include <Rig.h>
+#include <Sound.h>
 
 #include <controllers/Pose.h>
 
@@ -93,9 +94,10 @@ public:
     AudioListenerMode getAudioListenerModeCamera() const { return FROM_CAMERA; }
     AudioListenerMode getAudioListenerModeCustom() const { return CUSTOM; }
 
-    void reset(bool andReload = false);
+    Q_INVOKABLE void reset(bool andRecenter = false, bool andReload = true, bool andHead = true);
     void update(float deltaTime);
-    void preRender(RenderArgs* renderArgs);
+    virtual void postUpdate(float deltaTime) override;
+    void preDisplaySide(RenderArgs* renderArgs);
 
     const glm::mat4& getHMDSensorMatrix() const { return _hmdSensorMatrix; }
     const glm::vec3& getHMDSensorPosition() const { return _hmdSensorPosition; }
@@ -104,6 +106,10 @@ public:
 
     // thread safe
     Q_INVOKABLE glm::mat4 getSensorToWorldMatrix() const;
+
+    Q_INVOKABLE void setOrientationVar(const QVariant& newOrientationVar);
+    Q_INVOKABLE QVariant getOrientationVar() const;
+
 
     // Pass a recent sample of the HMD to the avatar.
     // This can also update the avatar's position to follow the HMD
@@ -139,9 +145,6 @@ public:
     // remove an animation role override and return to the standard animation.
     Q_INVOKABLE void restoreRoleAnimation(const QString& role);
 
-    // prefetch animation
-    Q_INVOKABLE void prefetchAnimation(const QString& url);
-
     // Adds handler(animStateDictionaryIn) => animStateDictionaryOut, which will be invoked just before each animGraph state update.
     // The handler will be called with an animStateDictionaryIn that has all those properties specified by the (possibly empty)
     // propertiesList argument. However for debugging, if the properties argument is null, all internal animGraph state is provided.
@@ -157,6 +160,8 @@ public:
 
     Q_INVOKABLE bool getSnapTurn() const { return _useSnapTurn; }
     Q_INVOKABLE void setSnapTurn(bool on) { _useSnapTurn = on; }
+    Q_INVOKABLE bool getClearOverlayWhenDriving() const { return _clearOverlayWhenDriving; }
+    Q_INVOKABLE void setClearOverlayWhenDriving(bool on) { _clearOverlayWhenDriving = on; }
 
     // get/set avatar data
     void saveData();
@@ -215,11 +220,15 @@ public:
     MyCharacterController* getCharacterController() { return &_characterController; }
     const MyCharacterController* getCharacterController() const { return &_characterController; }
 
+    void updateMotors();
     void prepareForPhysicsSimulation();
     void harvestResultsFromPhysicsSimulation(float deltaTime);
 
     const QString& getCollisionSoundURL() { return _collisionSoundURL; }
     void setCollisionSoundURL(const QString& url);
+
+    SharedSoundPointer getCollisionSound();
+    void setCollisionSound(SharedSoundPointer sound) { _collisionSound = sound; }
 
     void clearScriptableSettings();
 
@@ -295,7 +304,7 @@ signals:
     void collisionWithEntity(const Collision& collision);
     void energyChanged(float newEnergy);
     void positionGoneTo();
-
+    void onLoadComplete();
 
 private:
 
@@ -305,7 +314,6 @@ private:
     void simulate(float deltaTime);
     void updateFromTrackers(float deltaTime);
     virtual void render(RenderArgs* renderArgs, const glm::vec3& cameraPositio) override;
-    virtual void renderBody(RenderArgs* renderArgs, ViewFrustum* renderFrustum, float glowLevel = 0.0f) override;
     virtual bool shouldRenderHead(const RenderArgs* renderArgs) const override;
     void setShouldRenderLocally(bool shouldRender) { _shouldRender = shouldRender; setEnableMeshVisible(shouldRender); }
     bool getShouldRenderLocally() const { return _shouldRender; }
@@ -327,6 +335,8 @@ private:
 
     bool cameraInsideHead() const;
 
+    void updateEyeContactTarget(float deltaTime);
+
     // These are made private for MyAvatar so that you will use the "use" methods instead
     virtual void setSkeletonModelURL(const QUrl& skeletonModelURL) override;
 
@@ -343,6 +353,7 @@ private:
     float _driveKeys[MAX_DRIVE_KEYS];
     bool _wasPushing;
     bool _isPushing;
+    bool _isBeingPushed;
     bool _isBraking;
 
     float _boomLength;
@@ -351,13 +362,14 @@ private:
 
     glm::vec3 _thrust;  // impulse accumulator for outside sources
 
-    glm::vec3 _keyboardMotorVelocity; // target local-frame velocity of avatar (keyboard)
-    float _keyboardMotorTimescale; // timescale for avatar to achieve its target velocity
-    glm::vec3 _scriptedMotorVelocity; // target local-frame velocity of avatar (script)
+    glm::vec3 _actionMotorVelocity; // target local-frame velocity of avatar (default controller actions)
+    glm::vec3 _scriptedMotorVelocity; // target local-frame velocity of avatar (analog script)
     float _scriptedMotorTimescale; // timescale for avatar to achieve its target velocity
     int _scriptedMotorFrame;
     quint32 _motionBehaviors;
     QString _collisionSoundURL;
+
+    SharedSoundPointer _collisionSound;
 
     MyCharacterController _characterController;
 
@@ -367,6 +379,7 @@ private:
     float _oculusYawOffset;
 
     eyeContactTarget _eyeContactTarget;
+    float _eyeContactTargetTimer { 0.0f };
 
     glm::vec3 _trackedHeadPosition;
 
@@ -374,8 +387,7 @@ private:
 
     // private methods
     void updateOrientation(float deltaTime);
-    glm::vec3 applyKeyboardMotor(float deltaTime, const glm::vec3& velocity, bool isHovering);
-    glm::vec3 applyScriptedMotor(float deltaTime, const glm::vec3& velocity);
+    void updateActionMotor(float deltaTime);
     void updatePosition(float deltaTime);
     void updateCollisionSound(const glm::vec3& penetration, float deltaTime, float frequency);
     void initHeadBones();
@@ -386,6 +398,7 @@ private:
     QString _fullAvatarModelName;
     QUrl _animGraphUrl {""};
     bool _useSnapTurn { true };
+    bool _clearOverlayWhenDriving { false };
 
     // cache of the current HMD sensor position and orientation
     // in sensor space.

@@ -18,16 +18,23 @@ Frame {
     HifiConstants { id: hifi }
 
     Rectangle {
-        id: modalFrame
+        id: frameContent
 
         readonly property bool hasTitle: window.title != ""
 
+        readonly property int frameMarginLeft: hifi.dimensions.modalDialogMargin.x
+        readonly property int frameMarginRight: hifi.dimensions.modalDialogMargin.x
+        readonly property int frameMarginTop: hifi.dimensions.modalDialogMargin.y + (frameContent.hasTitle ? hifi.dimensions.modalDialogTitleHeight + 10 : 0)
+        readonly property int frameMarginBottom: hifi.dimensions.modalDialogMargin.y
+
+        signal frameClicked();
+
         anchors {
             fill: parent
-            topMargin: -hifi.dimensions.modalDialogMargin.y - (modalFrame.hasTitle ? hifi.dimensions.modalDialogTitleHeight + 10 : 0)
-            leftMargin: -hifi.dimensions.modalDialogMargin.x
-            rightMargin: -hifi.dimensions.modalDialogMargin.x
-            bottomMargin: -hifi.dimensions.modalDialogMargin.y
+            topMargin: -frameMarginTop
+            leftMargin: -frameMarginLeft
+            rightMargin: -frameMarginRight
+            bottomMargin: -frameMarginBottom
         }
 
         border {
@@ -37,8 +44,16 @@ Frame {
         radius: hifi.dimensions.borderRadius
         color: hifi.colors.faintGray
 
+        // Enable dragging of the window
+        MouseArea {
+            anchors.fill: parent
+            drag.target: window
+            enabled: window.draggable
+            onClicked: window.frameClicked();
+        }
+
         Item {
-            visible: modalFrame.hasTitle
+            visible: frameContent.hasTitle
             anchors.fill: parent
             anchors {
                 topMargin: -parent.anchors.topMargin

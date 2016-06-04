@@ -15,6 +15,7 @@
 
 #include <QtCore/QSize>
 #include <QtCore/QPoint>
+#include <QtCore/QElapsedTimer>
 class QImage;
 
 #include <GLMHelpers.h>
@@ -59,6 +60,10 @@ class DisplayPlugin : public Plugin {
     Q_OBJECT
     using Parent = Plugin;
 public:
+    enum Event {
+        Present = QEvent::User + 1
+    };
+
     bool activate() override;
     void deactivate() override;
     virtual bool isHmd() const { return false; }
@@ -66,7 +71,7 @@ public:
     /// By default, all HMDs are stereo
     virtual bool isStereo() const { return isHmd(); }
     virtual bool isThrottled() const { return false; }
-    virtual float getTargetFrameRate() { return 0.0f; }
+    virtual float getTargetFrameRate() const { return 0.0f; }
 
     /// Returns a boolean value indicating whether the display is currently visible 
     /// to the user.  For monitor displays, false might indicate that a screensaver,
@@ -105,6 +110,13 @@ public:
         return aspect(getRecommendedRenderSize());
     }
 
+    // The recommended bounds for primary overlay placement
+    virtual QRect getRecommendedOverlayRect() const {
+        const int DESKTOP_SCREEN_PADDING = 50;
+        auto recommendedSize = getRecommendedUiSize() - glm::uvec2(DESKTOP_SCREEN_PADDING);
+        return QRect(0, 0, recommendedSize.x, recommendedSize.y);
+    }
+
     // Stereo specific methods
     virtual glm::mat4 getEyeProjection(Eye eye, const glm::mat4& baseProjection) const {
         return baseProjection;
@@ -125,7 +137,7 @@ public:
     }
 
     // will query the underlying hmd api to compute the most recent head pose
-    virtual void beginFrameRender(uint32_t frameIndex) {}
+    virtual bool beginFrameRender(uint32_t frameIndex) { return true; }
 
     // returns a copy of the most recent head pose, computed via updateHeadPose
     virtual glm::mat4 getHeadPose() const {
@@ -142,8 +154,15 @@ public:
     virtual void abandonCalibration() {}
     virtual void resetSensors() {}
     virtual float devicePixelRatio() { return 1.0f; }
-    virtual float presentRate() { return -1.0f; }
+    // Rate at which we present to the display device
+    virtual float presentRate() const { return -1.0f; }
+    // Rate at which new frames are being presented to the display device
+    virtual float newFramePresentRate() const { return -1.0f; }
+    // Rate at which rendered frames are being skipped
+    virtual float droppedFrameRate() const { return -1.0f; }
     uint32_t presentCount() const { return _presentedFrameIndex; }
+    // Time since last call to incrementPresentCount (only valid if DEBUG_PAINT_DELAY is defined)
+    int64_t getPaintDelayUsecs() const;
 
     virtual void cycleDebugOutput() {}
 
@@ -151,11 +170,17 @@ public:
 
 signals:
     void recommendedFramebufferSizeChanged(const QSize & size);
+    // Indicates that this display plugin is no longer valid for use.
+    // For instance if a user exits Oculus Home or Steam VR while 
+    // using the corresponding plugin, that plugin should be disabled.
+    void outputDeviceLost();
 
 protected:
-    void incrementPresentCount() { ++_presentedFrameIndex; }
+    void incrementPresentCount();
 
 private:
     std::atomic<uint32_t> _presentedFrameIndex;
+    mutable std::mutex _paintDelayMutex;
+    QElapsedTimer _paintDelayTimer;
 };
 

@@ -16,6 +16,8 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QDesktopWidget>
 #include <glm/gtc/type_ptr.hpp>
+#include <QtGui/QWindow>
+#include <QQuickWindow>
 
 #include <ui/Menu.h>
 #include <NumericalConstants.h>
@@ -34,6 +36,7 @@ static const float reticleSize = TWO_PI / 100.0f;
 static QString _tooltipId;
 
 const uvec2 CompositorHelper::VIRTUAL_SCREEN_SIZE = uvec2(3960, 1188); // ~10% more pixel density than old version, 72dx240d FOV
+const QRect CompositorHelper::VIRTUAL_SCREEN_RECOMMENDED_OVERLAY_RECT = QRect(956, 0, 2048, 1188); // don't include entire width only center 2048
 const float CompositorHelper::VIRTUAL_UI_ASPECT_RATIO = (float)VIRTUAL_SCREEN_SIZE.x / (float)VIRTUAL_SCREEN_SIZE.y;
 const vec2 CompositorHelper::VIRTUAL_UI_TARGET_FOV = vec2(PI * 3.0f / 2.0f, PI * 3.0f / 2.0f / VIRTUAL_UI_ASPECT_RATIO);
 const vec2 CompositorHelper::MOUSE_EXTENTS_ANGULAR_SIZE = vec2(PI * 2.0f, PI * 0.95f); // horizontal: full sphere,  vertical: ~5deg from poles
@@ -255,7 +258,7 @@ glm::vec2 CompositorHelper::getReticlePosition() const {
         QMutexLocker locker(&_reticleLock);
         return _reticlePositionInHMD;
     }
-    return toGlm(QCursor::pos());
+    return toGlm(_renderingWidget->mapFromGlobal(QCursor::pos()));
 }
 
 bool CompositorHelper::getReticleOverDesktop() const {
@@ -321,17 +324,8 @@ void CompositorHelper::setReticlePosition(const glm::vec2& position, bool sendFa
             sendFakeMouseEvent();
         }
     } else {
-        // NOTE: This is some debugging code we will leave in while debugging various reticle movement strategies,
-        // remove it after we're done
-        const float REASONABLE_CHANGE = 50.0f;
-        glm::vec2 oldPos = toGlm(QCursor::pos());
-        auto distance = glm::distance(oldPos, position);
-        if (distance > REASONABLE_CHANGE) {
-            qDebug() << "Contrller::ScriptingInterface ---- UNREASONABLE CHANGE! distance:" <<
-                distance << " oldPos:" << oldPos.x << "," << oldPos.y << " newPos:" << position.x << "," << position.y;
-        }
-
-        QCursor::setPos(position.x, position.y);
+        const QPoint point(position.x, position.y);
+        QCursor::setPos(_renderingWidget->mapToGlobal(point));
     }
 }
 

@@ -17,7 +17,7 @@
 #include <QtGui/QImage>
 
 #include <gl/QOpenGLContextWrapper.h>
-
+#include <gpu/Texture.h>
 #include <gl/GLWidget.h>
 #include <NumericalConstants.h>
 #include <DependencyManager.h>
@@ -26,9 +26,9 @@
 #include <gl/Config.h>
 #include <gl/GLEscrow.h>
 #include <GLMHelpers.h>
-#include <gpu/GLBackend.h>
 #include <CursorManager.h>
 #include "CompositorHelper.h"
+
 
 #if THREADED_PRESENT
 
@@ -236,12 +236,6 @@ bool OpenGLDisplayPlugin::activate() {
 
     _vsyncSupported = _container->getPrimaryWidget()->isVsyncSupported();
 
-    // Child classes may override this in order to do things like initialize 
-    // libraries, etc
-    if (!internalActivate()) {
-        return false;
-    }
-
 
 #if THREADED_PRESENT
     // Start the present thread if necessary
@@ -257,8 +251,18 @@ bool OpenGLDisplayPlugin::activate() {
         // Start execution
         presentThread->start();
     }
+    _presentThread = presentThread.data();
+#endif
+    
+    // Child classes may override this in order to do things like initialize
+    // libraries, etc
+    if (!internalActivate()) {
+        return false;
+    }
 
-    // This should not return until the new context has been customized 
+#if THREADED_PRESENT
+
+    // This should not return until the new context has been customized
     // and the old context (if any) has been uncustomized
     presentThread->setNewDisplayPlugin(this);
 #else
@@ -385,6 +389,11 @@ bool OpenGLDisplayPlugin::eventFilter(QObject* receiver, QEvent* event) {
 }
 
 void OpenGLDisplayPlugin::submitSceneTexture(uint32_t frameIndex, const gpu::TexturePointer& sceneTexture) {
+    if (_lockCurrentTexture) {
+        _container->releaseSceneTexture(sceneTexture);
+        return;
+    }
+
     {
         Lock lock(_mutex);
         _sceneTextureToFrameIndexMap[sceneTexture] = frameIndex;
@@ -415,25 +424,18 @@ void OpenGLDisplayPlugin::updateTextures() {
     if (_sceneTextureEscrow.fetchAndReleaseWithGpuWait(_currentSceneTexture)) {
 #endif
         updateFrameData();
-    }
+        _newFrameRate.increment();
+    } 
 
     _overlayTextureEscrow.fetchSignaledAndRelease(_currentOverlayTexture);
 }
 
 void OpenGLDisplayPlugin::updateFrameData() {
     Lock lock(_mutex);
-    _currentRenderFrameIndex = _sceneTextureToFrameIndexMap[_currentSceneTexture];
-}
-
-void OpenGLDisplayPlugin::updateFramerate() {
-    uint64_t now = usecTimestampNow();
-    static uint64_t lastSwapEnd { now };
-    uint64_t diff = now - lastSwapEnd;
-    lastSwapEnd = now;
-    if (diff != 0) {
-        Lock lock(_mutex);
-        _usecsPerFrame.updateAverage(diff);
-    }
+    auto previousFrameIndex = _currentPresentFrameIndex;
+    _currentPresentFrameIndex = _sceneTextureToFrameIndexMap[_currentSceneTexture];
+    auto skippedCount = (_currentPresentFrameIndex - previousFrameIndex) - 1;
+    _droppedFrameRate.increment(skippedCount);
 }
 
 void OpenGLDisplayPlugin::compositeOverlay() {
@@ -441,6 +443,7 @@ void OpenGLDisplayPlugin::compositeOverlay() {
 
     auto compositorHelper = DependencyManager::get<CompositorHelper>();
 
+    useProgram(_program);
     // check the alpha
     auto overlayAlpha = compositorHelper->getAlpha();
     if (overlayAlpha > 0.0f) {
@@ -467,6 +470,7 @@ void OpenGLDisplayPlugin::compositePointer() {
     using namespace oglplus;
     auto compositorHelper = DependencyManager::get<CompositorHelper>();
 
+    useProgram(_program);
     // check the alpha
     auto overlayAlpha = compositorHelper->getAlpha();
     if (overlayAlpha > 0.0f) {
@@ -487,6 +491,13 @@ void OpenGLDisplayPlugin::compositePointer() {
     Uniform<float>(*_program, _alphaUniform).Set(1.0);
 }
 
+void OpenGLDisplayPlugin::compositeScene() {
+    using namespace oglplus;
+    useProgram(_program);
+    Uniform<glm::mat4>(*_program, _mvpUniform).Set(mat4());
+    drawUnitQuad();
+}
+
 void OpenGLDisplayPlugin::compositeLayers() {
     using namespace oglplus;
     auto targetRenderSize = getRecommendedRenderSize();
@@ -498,9 +509,7 @@ void OpenGLDisplayPlugin::compositeLayers() {
         Context::Viewport(targetRenderSize.x, targetRenderSize.y);
         Context::Clear().DepthBuffer();
         glBindTexture(GL_TEXTURE_2D, getSceneTextureId());
-        _program->Bind();
-        Uniform<glm::mat4>(*_program, _mvpUniform).Set(mat4());
-        drawUnitQuad();
+        compositeScene();
         auto overlayTextureId = getOverlayTextureId();
         if (overlayTextureId) {
             glEnable(GL_BLEND);
@@ -545,23 +554,25 @@ void OpenGLDisplayPlugin::present() {
         compositeLayers();
         // Take the composite framebuffer and send it to the output device
         internalPresent();
-        updateFramerate();
+        _presentRate.increment();
+        _activeProgram.reset();
     }
 }
 
-float OpenGLDisplayPlugin::presentRate() {
-    float result { -1.0f }; 
-    {
-        Lock lock(_mutex);
-        result = _usecsPerFrame.getAverage();
-    }
-    result = 1.0f / result; 
-    result *= USECS_PER_SECOND;
-    return result;
+float OpenGLDisplayPlugin::newFramePresentRate() const {
+    return _newFrameRate.rate();
+}
+
+float OpenGLDisplayPlugin::droppedFrameRate() const {
+    return _droppedFrameRate.rate();
+}
+
+float OpenGLDisplayPlugin::presentRate() const {
+    return _presentRate.rate();
 }
 
 void OpenGLDisplayPlugin::drawUnitQuad() {
-    _program->Bind();
+    useProgram(_program);
     _plane->Use();
     _plane->Draw();
 }
@@ -617,14 +628,15 @@ uint32_t OpenGLDisplayPlugin::getSceneTextureId() const {
     if (!_currentSceneTexture) {
         return 0;
     }
-    return gpu::GLBackend::getTextureID(_currentSceneTexture, false);
+    
+    return _currentSceneTexture->getHardwareId(); 
 }
 
 uint32_t OpenGLDisplayPlugin::getOverlayTextureId() const {
     if (!_currentOverlayTexture) {
         return 0;
     }
-    return gpu::GLBackend::getTextureID(_currentOverlayTexture, false);
+    return _currentOverlayTexture->getHardwareId();
 }
 
 void OpenGLDisplayPlugin::eyeViewport(Eye eye) const {
@@ -659,4 +671,11 @@ glm::uvec2 OpenGLDisplayPlugin::getSurfaceSize() const {
 bool OpenGLDisplayPlugin::hasFocus() const {
     auto window = _container->getPrimaryWidget();
     return window ? window->hasFocus() : false;
+}
+
+void OpenGLDisplayPlugin::useProgram(const ProgramPtr& program) {
+    if (_activeProgram != program) {
+        program->Bind();
+        _activeProgram = program;
+    }
 }

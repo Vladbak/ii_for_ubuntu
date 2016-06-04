@@ -17,6 +17,7 @@
 #include "NetworkLogging.h"
 
 #include "UserActivityLogger.h"
+#include <DependencyManager.h>
 
 static const QString USER_ACTIVITY_URL = "/api/v1/user_activities";
 
@@ -25,20 +26,16 @@ UserActivityLogger& UserActivityLogger::getInstance() {
     return sharedInstance;
 }
 
-//UTII: we disable the useractivity logger by default, we dont need it
-UserActivityLogger::UserActivityLogger() : _disabled(true) {
-}
-
 void UserActivityLogger::disable(bool disable) {
-    _disabled = disable;
+    _disabled.set(disable);
 }
 
 void UserActivityLogger::logAction(QString action, QJsonObject details, JSONCallbackParameters params) {
-    if (_disabled) {
+    if (_disabled.get()) {
         return;
     }
     
-    AccountManager& accountManager = AccountManager::getInstance();
+    auto accountManager = DependencyManager::get<AccountManager>();
     QHttpMultiPart* multipart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
     
     // Adding the action name
@@ -63,8 +60,8 @@ void UserActivityLogger::logAction(QString action, QJsonObject details, JSONCall
         params.errorCallbackMethod = "requestError";
     }
     
-    accountManager.sendRequest(USER_ACTIVITY_URL,
-                               AccountManagerAuth::Required,
+    accountManager->sendRequest(USER_ACTIVITY_URL,
+                               AccountManagerAuth::Optional,
                                QNetworkAccessManager::PostOperation,
                                params, NULL, multipart);
 }
@@ -86,11 +83,11 @@ void UserActivityLogger::launch(QString applicationVersion, bool previousSession
     logAction(ACTION_NAME, actionDetails);
 }
 
-void UserActivityLogger::insufficientGLVersion(QString glVersion) {
+void UserActivityLogger::insufficientGLVersion(const QJsonObject& glData) {
     const QString ACTION_NAME = "insufficient_gl";
     QJsonObject actionDetails;
-    QString GL_VERSION = "glVersion";
-    actionDetails.insert(GL_VERSION, glVersion);
+    QString GL_DATA = "glData";
+    actionDetails.insert(GL_DATA, glData);
 
     logAction(ACTION_NAME, actionDetails);
 }

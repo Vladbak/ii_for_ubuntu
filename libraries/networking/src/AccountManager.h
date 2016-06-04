@@ -20,6 +20,9 @@
 #include "NetworkAccessManager.h"
 
 #include "DataServerAccountInfo.h"
+#include "SharedUtil.h"
+
+#include <DependencyManager.h>
 
 class JSONCallbackParameters {
 public:
@@ -49,10 +52,14 @@ Q_DECLARE_METATYPE(AccountManagerAuth::Type);
 
 const QByteArray ACCESS_TOKEN_AUTHORIZATION_HEADER = "Authorization";
 
-class AccountManager : public QObject {
+using UserAgentGetter = std::function<QString()>;
+
+const auto DEFAULT_USER_AGENT_GETTER = []() -> QString { return HIGH_FIDELITY_USER_AGENT; };
+
+class AccountManager : public QObject, public Dependency {
     Q_OBJECT
 public:
-    static AccountManager& getInstance(bool forceReset = false);
+    AccountManager(UserAgentGetter userAgentGetter = DEFAULT_USER_AGENT_GETTER);
 
     Q_INVOKABLE void sendRequest(const QString& path,
                                  AccountManagerAuth::Type authType,
@@ -77,6 +84,10 @@ public:
 
     DataServerAccountInfo& getAccountInfo() { return _accountInfo; }
 
+    static QJsonObject dataObjectFromResponse(QNetworkReply& requestReply);
+
+    void setSessionID(const QUuid& sessionID) { _sessionID = sessionID; }
+
 public slots:
     void requestAccessToken(const QString& login, const QString& password);
 
@@ -85,8 +96,6 @@ public slots:
     void requestAccessTokenError(QNetworkReply::NetworkError error);
     void requestProfileError(QNetworkReply::NetworkError error);
     void logout();
-    void updateBalance();
-    void accountInfoBalanceChanged(qint64 newBalance);
     void generateNewUserKeypair() { generateNewKeypair(); }
     void generateNewDomainKeypair(const QUuid& domainID) { generateNewKeypair(false, domainID); }
 
@@ -99,7 +108,6 @@ signals:
     void loginComplete(const QUrl& authURL);
     void loginFailed();
     void logoutComplete();
-    void balanceChanged(qint64 newBalance);
     void newKeypair();
 
 private slots:
@@ -111,7 +119,6 @@ private slots:
     void generateNewKeypair(bool isUserKeypair = true, const QUuid& domainID = QUuid());
 
 private:
-    AccountManager();
     AccountManager(AccountManager const& other) = delete;
     void operator=(AccountManager const& other) = delete;
 
@@ -120,6 +127,8 @@ private:
 
     void passSuccessToCallback(QNetworkReply* reply);
     void passErrorToCallback(QNetworkReply* reply);
+
+    UserAgentGetter _userAgentGetter;
 
     QUrl _authURL;
     
@@ -130,6 +139,8 @@ private:
 
     bool _isWaitingForKeypairResponse { false };
     QByteArray _pendingPrivateKey;
+
+    QUuid _sessionID;
 };
 
 #endif // hifi_AccountManager_h

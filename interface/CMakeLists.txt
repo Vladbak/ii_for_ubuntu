@@ -5,10 +5,6 @@ set(APP_NAME "Infinity Island")
 # set a default root dir for each of our optional externals if it was not passed
 #set(OPTIONAL_EXTERNALS "LeapMotion")
 
-#if(WIN32)
-#    list(APPEND OPTIONAL_EXTERNALS "3DConnexionClient")
-#endif()
-
 foreach(EXTERNAL ${OPTIONAL_EXTERNALS})
   string(TOUPPER ${EXTERNAL} ${EXTERNAL}_UPPERCASE)
   if (NOT ${${EXTERNAL}_UPPERCASE}_ROOT_DIR)
@@ -45,7 +41,7 @@ else ()
 endif ()
 
 find_package(Qt5 COMPONENTS
-    Gui Multimedia Network OpenGL Qml Quick Script Svg
+    Gui Multimedia Network OpenGL Qml Quick Script ScriptTools Svg
     WebChannel WebEngine WebEngineWidgets WebKitWidgets WebSockets)
 
 # grab the ui files in resources/ui
@@ -146,7 +142,7 @@ if (WIN32)
 endif()
 
 # link required hifi libraries
-link_hifi_libraries(shared octree gpu gl procedural model render
+link_hifi_libraries(shared octree gpu gl gpu-gl procedural model render
                     recording fbx networking model-networking entities avatars
                     audio audio-client animation script-engine physics
                     render-utils entities-renderer ui auto-updater
@@ -208,7 +204,7 @@ include_directories("${PROJECT_SOURCE_DIR}/src")
 target_link_libraries(
   ${TARGET_NAME}
   Qt5::Gui Qt5::Network Qt5::Multimedia Qt5::OpenGL
-  Qt5::Qml Qt5::Quick Qt5::Script Qt5::Svg
+  Qt5::Qml Qt5::Quick Qt5::Script Qt5::ScriptTools Qt5::Svg
   Qt5::WebChannel Qt5::WebEngine Qt5::WebEngineWidgets Qt5::WebKitWidgets
 )
 
@@ -217,6 +213,10 @@ target_link_libraries(
 if (WIN32)
   add_paths_to_fixup_libs(${Qt5_DIR}/../../../plugins/qtwebengine)
 endif()
+
+if (UNIX)
+    target_link_libraries(${TARGET_NAME} pthread)
+endif(UNIX)
 
 # assume we are using a Qt build without bearer management
 add_definitions(-DQT_NO_BEARERMANAGEMENT)
@@ -246,7 +246,7 @@ else (APPLE)
     "${PROJECT_SOURCE_DIR}/resources"
     $<TARGET_FILE_DIR:${TARGET_NAME}>/resources
     COMMAND "${CMAKE_COMMAND}" -E copy_directory
-    "${CMAKE_SOURCE_DIR}/examples"
+    "${CMAKE_SOURCE_DIR}/scripts"
     $<TARGET_FILE_DIR:${TARGET_NAME}>/scripts
   )
 
@@ -270,12 +270,12 @@ else (APPLE)
 endif (APPLE)
 
 #UTII if (SCRIPTS_INSTALL_DIR)
-#UTII  # setup install of scripts beside interface executable
-#UTII  install(
-#UTII    DIRECTORY "${CMAKE_SOURCE_DIR}/examples/"
-#UTII    DESTINATION ${SCRIPTS_INSTALL_DIR}/scripts
-#UTII    COMPONENT ${CLIENT_COMPONENT}
-#UTII  )
+#UTII   # setup install of scripts beside interface executable
+#UTII   install(
+#UTII     DIRECTORY "${CMAKE_SOURCE_DIR}/scripts/"
+#UTII     DESTINATION ${SCRIPTS_INSTALL_DIR}/scripts
+#UTII     COMPONENT ${CLIENT_COMPONENT}
+#UTII   )
 #UTII endif()
 
 add_bugsplat()

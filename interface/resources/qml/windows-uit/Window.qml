@@ -31,7 +31,7 @@ Fadable {
     // decorations can extend outside it.
     implicitHeight: content ? content.height : 0
     implicitWidth: content ? content.width : 0
-    x: -1; y: -1
+    x: desktop.invalid_position; y: desktop.invalid_position;
     enabled: visible
 
     signal windowDestroyed();
@@ -51,6 +51,8 @@ Fadable {
     // property bool pinnable: false
     // property bool pinned: false
     property bool resizable: false
+    property bool gradientsSupported: desktop.gradientsSupported
+    property int colorScheme: hifi.colorSchemes.dark
 
     property vector2d minSize: Qt.vector2d(100, 100)
     property vector2d maxSize: Qt.vector2d(1280, 800)
@@ -142,9 +144,7 @@ Fadable {
         }
 
         LinearGradient {
-            // FIXME: Alpha gradients display as fuschia under QtQuick 2.5 on OSX.
-            // Check again when have a later version of QtQuick.
-            visible: modality != Qt.ApplicationModal && Qt.platform.os != "osx"
+            visible: gradientsSupported && modality != Qt.ApplicationModal
             anchors.top: contentBackground.bottom
             anchors.left: contentBackground.left
             width: contentBackground.width - 1
@@ -216,7 +216,7 @@ Fadable {
                 bottom: parent.bottom
             }
             width: parent.contentWidth
-            height: footer.height + 2 * hifi.dimensions.contentSpacing.y
+            height: footer.height + 2 * hifi.dimensions.contentSpacing.y + 3
             color: hifi.colors.baseGray
             visible: footer.height > 0
 
@@ -249,9 +249,16 @@ Fadable {
 
     children: [ swallower, frame, pane, activator ]
 
-    Component.onCompleted: { raise(); setDefaultFocus(); }
-    Component.onDestruction: windowDestroyed();
-    onParentChanged: raise();
+    Component.onCompleted: {
+        window.parentChanged.connect(raise);
+        raise();
+        setDefaultFocus();
+        centerOrReposition();
+    }
+    Component.onDestruction: {
+        window.parentChanged.disconnect(raise);  // Prevent warning on shutdown
+        windowDestroyed();
+    }
 
     onVisibleChanged: {
         if (!visible && destroyOnInvisible) {
@@ -262,6 +269,18 @@ Fadable {
             raise();
         }
         enabled = visible
+
+        if (visible && parent) {
+            centerOrReposition();
+        }
+    }
+
+    function centerOrReposition() {
+        if (x == desktop.invalid_position && y == desktop.invalid_position) {
+            desktop.centerOnVisible(window);
+        } else {
+            desktop.repositionOnVisible(window);
+        }
     }
 
     function raise() {

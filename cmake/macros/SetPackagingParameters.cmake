@@ -26,17 +26,29 @@ macro(SET_PACKAGING_PARAMETERS)
     set(BUILD_ORGANIZATION "Infinity Island")
     set(HIGH_FIDELITY_PROTOCOL "utii")
     set(INTERFACE_BUNDLE_NAME "Infinity Island")
+    set(INTERFACE_ICON_PREFIX "utii")
+
+    # add definition for this release type
+    add_definitions(-DPRODUCTION_BUILD)
+
   elseif (RELEASE_TYPE STREQUAL "PR")
     set(DEPLOY_PACKAGE TRUE)
     set(PR_BUILD 1)
     set(BUILD_VERSION "PR${RELEASE_NUMBER}")
     set(BUILD_ORGANIZATION "Infinity Island - ${BUILD_VERSION}")
     set(INTERFACE_BUNDLE_NAME "Infinity Island")
+    set(INTERFACE_ICON_PREFIX "utii")
+
+    # add definition for this release type
+    add_definitions(-DPR_BUILD)
   else ()
     set(DEV_BUILD 1)
     set(BUILD_VERSION "dev")
     set(BUILD_ORGANIZATION "Infinity Island - ${BUILD_VERSION}")
     set(INTERFACE_BUNDLE_NAME "Infinity Island")
+
+    # add definition for this release type
+    add_definitions(-DDEV_BUILD)
   endif ()
   set(INTERFACE_ICON_PREFIX "UTII")
 

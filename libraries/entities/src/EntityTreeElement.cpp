@@ -13,6 +13,7 @@
 
 #include <FBXReader.h>
 #include <GeometryUtil.h>
+#include <OctreeUtils.h>
 
 #include "EntitiesLogging.h"
 #include "EntityItemProperties.h"
@@ -33,8 +34,6 @@ OctreeElementPointer EntityTreeElement::createNewElement(unsigned char* octalCod
     newChild->setTree(_myTree);
     return newChild;
 }
-
-
 
 void EntityTreeElement::init(unsigned char* octalCode) {
     OctreeElement::init(octalCode);
@@ -297,7 +296,7 @@ OctreeElement::AppendState EntityTreeElement::appendElementData(OctreePacketData
                         entityTreeElementExtraEncodeData->entities.contains(entity->getEntityItemID());
                 }
 
-                if (includeThisEntity && params.viewFrustum) {
+                if (includeThisEntity || params.recurseEverything) {
 
                     // we want to use the maximum possible box for this, so that we don't have to worry about the nuance of
                     // simulation changing what's visible. consider the case where the entity contains an angular velocity
@@ -305,7 +304,7 @@ OctreeElement::AppendState EntityTreeElement::appendElementData(OctreePacketData
                     // frustum culling on rendering.
                     bool success;
                     AACube entityCube = entity->getQueryAACube(success);
-                    if (!success || !params.viewFrustum->cubeIntersectsKeyhole(entityCube)) {
+                    if (!success || !params.viewFrustum.cubeIntersectsKeyhole(entityCube)) {
                         includeThisEntity = false; // out of view, don't include it
                     } else {
                         // Check the size of the entity, it's possible that a "too small to see" entity is included in a
@@ -322,9 +321,10 @@ OctreeElement::AppendState EntityTreeElement::appendElementData(OctreePacketData
                             // AABox.  If this happens, fall back to the queryAACube.
                             entityBounds = AABox(entityCube);
                         }
-                        auto renderAccuracy = params.viewFrustum->calculateRenderAccuracy(entityBounds,
-                                                                                          params.octreeElementSizeScale,
-                                                                                          params.boundaryLevelAdjust);
+                        auto renderAccuracy = calculateRenderAccuracy(params.viewFrustum.getPosition(),
+                                                                      entityBounds,
+                                                                      params.octreeElementSizeScale,
+                                                                      params.boundaryLevelAdjust);
                         if (renderAccuracy <= 0.0f) {
                             includeThisEntity = false; // too small, don't include it
 
@@ -699,7 +699,7 @@ void EntityTreeElement::getEntities(const glm::vec3& searchPosition, float searc
 
         // if the sphere doesn't intersect with our world frame AABox, we don't need to consider the more complex case
         glm::vec3 penetration;
-        if (success && entityBox.findSpherePenetration(searchPosition, searchRadius, penetration)) {
+        if (!success || entityBox.findSpherePenetration(searchPosition, searchRadius, penetration)) {
 
             glm::vec3 dimensions = entity->getDimensions();
 
@@ -764,7 +764,7 @@ void EntityTreeElement::getEntities(const AACube& cube, QVector<EntityItemPointe
         //
 
         // If the entities AABox touches the search cube then consider it to be found
-        if (success && entityBox.touches(cube)) {
+        if (!success || entityBox.touches(cube)) {
             foundEntities.push_back(entity);
         }
     });
@@ -790,7 +790,7 @@ void EntityTreeElement::getEntities(const AABox& box, QVector<EntityItemPointer>
         //
 
         // If the entities AABox touches the search cube then consider it to be found
-        if (success && entityBox.touches(box)) {
+        if (!success || entityBox.touches(box)) {
             foundEntities.push_back(entity);
         }
     });

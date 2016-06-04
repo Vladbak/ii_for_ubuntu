@@ -22,9 +22,9 @@
 
 const QString UNKNOWN_NodeType_t_NAME = "Unknown";
 
-static int NodePtrMetaTypeId = qRegisterMetaType<Node*>("Node*");
-static int sharedPtrNodeMetaTypeId = qRegisterMetaType<QSharedPointer<Node>>("QSharedPointer<Node>");
-static int sharedNodePtrMetaTypeId = qRegisterMetaType<SharedNodePointer>("SharedNodePointer");
+int NodePtrMetaTypeId = qRegisterMetaType<Node*>("Node*");
+int sharedPtrNodeMetaTypeId = qRegisterMetaType<QSharedPointer<Node>>("QSharedPointer<Node>");
+int sharedNodePtrMetaTypeId = qRegisterMetaType<SharedNodePointer>("SharedNodePointer");
 
 namespace NodeType {
     QHash<NodeType_t, QString> TypeNameHash;
@@ -73,9 +73,9 @@ void Node::setType(char type) {
     _symmetricSocket.setObjectName(typeString);
 }
 
-void Node::updateClockSkewUsec(int clockSkewSample) {
-    _clockSkewMovingPercentile.updatePercentile((float)clockSkewSample);
-    _clockSkewUsec = (int)_clockSkewMovingPercentile.getValueAtPercentile();
+void Node::updateClockSkewUsec(qint64 clockSkewSample) {
+    _clockSkewMovingPercentile.updatePercentile(clockSkewSample);
+    _clockSkewUsec = (quint64)_clockSkewMovingPercentile.getValueAtPercentile();
 }
 
 

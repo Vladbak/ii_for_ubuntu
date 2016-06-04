@@ -47,15 +47,15 @@ struct QuadBuilder {
 
 
 
-static QHash<QString, Font*> LOADED_FONTS;
+static QHash<QString, Font::Pointer> LOADED_FONTS;
 
-Font* Font::load(QIODevice& fontFile) {
-    Font* result = new Font();
-    result->read(fontFile);
-    return result;
+Font::Pointer Font::load(QIODevice& fontFile) {
+    Pointer font = std::make_shared<Font>();
+    font->read(fontFile);
+    return font;
 }
 
-Font* Font::load(const QString& family) {
+Font::Pointer Font::load(const QString& family) {
     if (!LOADED_FONTS.contains(family)) {
 
         static const QString SDFF_COURIER_PRIME_FILENAME{ ":/CourierPrime.sdff" };
@@ -363,7 +363,7 @@ void Font::drawString(gpu::Batch& batch, float x, float y, const QString& str, c
     batch._glUniform1i(_outlineLoc, (effectType == OUTLINE_EFFECT));
     
     // need the gamma corrected color here
-    glm::vec4 lrgba = glm::vec4(ColorUtils::toLinearVec3(glm::vec3(*color)), color->a);
+    glm::vec4 lrgba = ColorUtils::sRGBToLinearVec4(*color);
     batch._glUniform4fv(_colorLoc, 1, (const float*)&lrgba);
 
     batch.setInputFormat(_format);

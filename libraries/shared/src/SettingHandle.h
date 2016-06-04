@@ -26,6 +26,8 @@
 // TODO: remove
 class Settings : public QSettings {
 public:
+    static const QString firstRun;
+
     void getFloatValueIfValid(const QString& name, float& floatValue);
     void getBoolValue(const QString& name, bool& boolValue);
 
@@ -46,7 +48,7 @@ namespace Setting {
         Handle(const QString& key, const T& defaultValue) : Interface(key), _defaultValue(defaultValue) {}
         Handle(const QStringList& path, const T& defaultValue) : Handle(path.join("/"), defaultValue) {}
         
-        virtual ~Handle() { save(); }
+        virtual ~Handle() { deinit(); }
         
         // Returns setting value, returns its default value if not found
         T get() { return get(_defaultValue); }

@@ -742,10 +742,10 @@ SectionEnd
 !macroend
 
 !macro CheckForRunningApplications action prompter
-  !insertmacro PromptForRunningApplication "@INTERFACE_WIN_EXEC_NAME@" "@CONSOLE_SHORTCUT_NAME@" ${action} ${prompter}
-;UTII  !insertmacro PromptForRunningApplication "@CONSOLE_WIN_EXEC_NAME@" "@INTERFACE_SHORTCUT_NAME@" ${action} ${prompter}
-;UTII  !insertmacro PromptForRunningApplication "@DS_EXEC_NAME@" "Domain Server" ${action} ${prompter}
-;UTII  !insertmacro PromptForRunningApplication "@AC_EXEC_NAME@" "Assignment Client" ${action} ${prompter}
+  !insertmacro PromptForRunningApplication "@INTERFACE_WIN_EXEC_NAME@" "@INTERFACE_DISPLAY_NAME@"  ${action} ${prompter}
+;UTII  !insertmacro PromptForRunningApplication "@CONSOLE_WIN_EXEC_NAME@" "@CONSOLE_DISPLAY_NAME@" ${action} ${prompter}
+;UTII  !insertmacro PromptForRunningApplication "@DS_EXEC_NAME@" "@DS_DISPLAY_NAME@" ${action} ${prompter}
+;UTII  !insertmacro PromptForRunningApplication "@AC_EXEC_NAME@" "@AC_DISPLAY_NAME@" ${action} ${prompter}
 !macroend
 
 ;--------------------------------

@@ -1,22 +1,26 @@
 {
     "name": "Vive to Standard",
     "channels": [
-        { "from": "Vive.LY",  "when": "Vive.LS", "filters": "invert", "to": "Standard.LY" },
-        { "from": "Vive.LX",  "when": "Vive.LS", "to": "Standard.LX" },
+        { "from": "Vive.LY", "when": "Vive.LSOuter", "filters": ["invert"], "to": "Standard.LY" },
+        { "from": "Vive.LX", "when": "Vive.LSOuter", "to": "Standard.LX" },
 
         { "from": "Vive.LT", "to": "Standard.LT" },
-        { "from": "Vive.LB", "to": "Standard.LB" },
+        { "from": "Vive.LeftGrip", "to": "Standard.LB" },
         { "from": "Vive.LS", "to": "Standard.LS" },
+        { "from": "Vive.LSTouch", "to": "Standard.LSTouch" },
 
-        { "from": "Vive.RY",  "when": "Vive.RS", "filters": "invert", "to": "Standard.RY" },
-        { "from": "Vive.RX",  "when": "Vive.RS", "to": "Standard.RX" },
+        { "from": "Vive.RY", "when": "Vive.RSOuter", "filters": ["invert"], "to": "Standard.RY" },
+        { "from": "Vive.RX", "when": "Vive.RSOuter", "to": "Standard.RX" },
 
         { "from": "Vive.RT", "to": "Standard.RT" },
-        { "from": "Vive.RB", "to": "Standard.RB" },
+        { "from": "Vive.RightGrip", "to": "Standard.RB" },
         { "from": "Vive.RS", "to": "Standard.RS" },
+        { "from": "Vive.RSTouch", "to": "Standard.RSTouch" },
 
-        { "from": "Vive.LeftApplicationMenu", "to": "Standard.Back" },
-        { "from": "Vive.RightApplicationMenu", "to": "Standard.Start" },
+        { "from": "Vive.LSCenter", "to": "Standard.LeftPrimaryThumb" },
+        { "from": "Vive.LeftApplicationMenu", "to": "Standard.LeftSecondaryThumb" },
+        { "from": "Vive.RSCenter", "to": "Standard.RightPrimaryThumb" },
+        { "from": "Vive.RightApplicationMenu", "to": "Standard.RightSecondaryThumb" },
 
         { "from": "Vive.LeftHand", "to": "Standard.LeftHand" },
         { "from": "Vive.RightHand", "to": "Standard.RightHand" }

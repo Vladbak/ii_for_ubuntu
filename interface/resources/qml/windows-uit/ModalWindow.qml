@@ -14,9 +14,15 @@ import "."
 
 Window {
     id: window
-    anchors.centerIn: parent
     modality: Qt.ApplicationModal
     destroyOnCloseButton: true
     destroyOnInvisible: true
-    frame: ModalFrame{}
+    frame: ModalFrame { }
+
+    property int colorScheme: hifi.colorSchemes.light
+    property bool draggable: false
+
+    signal frameClicked();
+
+    anchors.centerIn: draggable ? undefined : parent
 }
