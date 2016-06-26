@@ -48,6 +48,7 @@ Q_DECLARE_METATYPE(QNetworkAccessManager::Operation)
 Q_DECLARE_METATYPE(JSONCallbackParameters)
 
 const QString ACCOUNTS_GROUP = "accounts";
+static const auto METAVERSE_SESSION_ID_HEADER = QString("HFM-SessionID").toLocal8Bit();
 
 JSONCallbackParameters::JSONCallbackParameters(QObject* jsonCallbackReceiver, const QString& jsonCallbackMethod,
                                                QObject* errorCallbackReceiver, const QString& errorCallbackMethod,
@@ -177,6 +178,7 @@ void AccountManager::setAuthURL(const QUrl& authURL) {
                         <<  "from previous settings file";
                     }
                 }
+            settings.endGroup();
 
             if (_accountInfo.getAccessToken().token.isEmpty()) {
                 qCWarning(networking) << "Unable to load account file. No existing account settings will be loaded.";
@@ -226,8 +228,7 @@ void AccountManager::sendRequest(const QString& path,
     // if we're allowed to send usage data, include whatever the current session ID is with this request
     auto& activityLogger = UserActivityLogger::getInstance();
     if (activityLogger.isEnabled()) {
-        static const QString METAVERSE_SESSION_ID_HEADER = "HFM-SessionID";
-        networkRequest.setRawHeader(METAVERSE_SESSION_ID_HEADER.toLocal8Bit(),
+        networkRequest.setRawHeader(METAVERSE_SESSION_ID_HEADER,
                                     uuidStringWithoutCurlyBraces(_sessionID).toLocal8Bit());
     }
 
@@ -326,6 +327,9 @@ void AccountManager::processReply() {
     QNetworkReply* requestReply = reinterpret_cast<QNetworkReply*>(sender());
 
     if (requestReply->error() == QNetworkReply::NoError) {
+        if (requestReply->hasRawHeader(METAVERSE_SESSION_ID_HEADER)) {
+            _sessionID = requestReply->rawHeader(METAVERSE_SESSION_ID_HEADER);
+        }
         passSuccessToCallback(requestReply);
     } else {
         passErrorToCallback(requestReply);
@@ -473,6 +477,11 @@ void AccountManager::setAccessTokenForCurrentAuthURL(const QString& accessToken)
     
     _accountInfo.setAccessToken(newOAuthToken);
 
+    persistAccountToFile();
+}
+
+void AccountManager::setTemporaryDomain(const QUuid& domainID, const QString& key) {
+    _accountInfo.setTemporaryDomain(domainID, key);
     persistAccountToFile();
 }
 
@@ -669,20 +678,23 @@ void AccountManager::processGeneratedKeypair() {
         const QString DOMAIN_PUBLIC_KEY_UPDATE_PATH = "api/v1/domains/%1/public_key";
     
         QString uploadPath;
-        if (keypairGenerator->getDomainID().isNull()) {
+        const auto& domainID = keypairGenerator->getDomainID();
+        if (domainID.isNull()) {
             uploadPath = USER_PUBLIC_KEY_UPDATE_PATH;
         } else {
-            uploadPath = DOMAIN_PUBLIC_KEY_UPDATE_PATH.arg(uuidStringWithoutCurlyBraces(keypairGenerator->getDomainID()));
+            uploadPath = DOMAIN_PUBLIC_KEY_UPDATE_PATH.arg(uuidStringWithoutCurlyBraces(domainID));
         }
 
         // setup a multipart upload to send up the public key
         /*QHttpMultiPart* requestMultiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
     
-        QHttpPart keyPart;
-        keyPart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("application/octet-stream"));
-        keyPart.setHeader(QNetworkRequest::ContentDispositionHeader,
+        QHttpPart publicKeyPart;
+        publicKeyPart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("application/octet-stream"));
+
+        publicKeyPart.setHeader(QNetworkRequest::ContentDispositionHeader,
                           QVariant("form-data; name=\"public_key\"; filename=\"public_key\""));
-        keyPart.setBody(keypairGenerator->getPublicKey());
+        publicKeyPart.setBody(keypairGenerator->getPublicKey());
+        requestMultiPart->append(publicKeyPart);
 
         requestMultiPart->append(keyPart);*/
 

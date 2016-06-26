@@ -335,6 +335,7 @@ void ScriptEngines::clearScripts() {
     Settings settings;
     settings.beginWriteArray(SETTINGS_KEY);
     settings.remove("");
+    settings.endArray();
 }
 
 void ScriptEngines::saveScripts() {
