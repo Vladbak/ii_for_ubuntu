@@ -71,7 +71,7 @@ private:
 
     OAuthAccessToken _accessToken;
     QString _username;
-	QString _role;
+    QString _role;
     QString _xmppPassword;
     QString _discourseApiKey;
     QUuid _walletID;

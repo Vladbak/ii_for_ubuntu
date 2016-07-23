@@ -28,10 +28,10 @@
 static const QString RUNNING_MARKER_FILENAME = "InfinityIsland.running";
 
 bool CrashHandler::checkForResetSettings(bool suppressPrompt) {
-        QSettings::setDefaultFormat(QSettings::IniFormat);
-        QSettings settings;
-        settings.beginGroup("Developer");
-        QVariant displayCrashOptions = settings.value(MenuOption::DisplayCrashOptions);
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings settings;
+    settings.beginGroup("Developer");
+    QVariant displayCrashOptions = settings.value(MenuOption::DisplayCrashOptions);
     QVariant askToResetSettingsOption = settings.value(MenuOption::AskToResetSettings);
         settings.endGroup();
     bool askToResetSettings = askToResetSettingsOption.isValid() && askToResetSettingsOption.toBool();

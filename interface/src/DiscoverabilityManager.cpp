@@ -41,34 +41,34 @@ void DiscoverabilityManager::updateLocation() {
     if (_mode.get() != Discoverability::None && accountManager->isLoggedIn()) {
         auto addressManager = DependencyManager::get<AddressManager>();
         DomainHandler& domainHandler = DependencyManager::get<NodeList>()->getDomainHandler();
-        
-            // construct a QJsonObject given the user's current address information
-            QJsonObject rootObject;
-            
-            QJsonObject locationObject;
-            
-            QString pathString = addressManager->currentPath();
-            
-            const QString LOCATION_KEY_IN_ROOT = "location";
-            
-            const QString PATH_KEY_IN_LOCATION = "path";
-            locationObject.insert(PATH_KEY_IN_LOCATION, pathString);
-            
+
+        // construct a QJsonObject given the user's current address information
+        QJsonObject rootObject;
+
+        QJsonObject locationObject;
+
+        QString pathString = addressManager->currentPath();
+
+        const QString LOCATION_KEY_IN_ROOT = "location";
+
+        const QString PATH_KEY_IN_LOCATION = "path";
+        locationObject.insert(PATH_KEY_IN_LOCATION, pathString);
+
         const QString CONNECTED_KEY_IN_LOCATION = "connected";
         locationObject.insert(CONNECTED_KEY_IN_LOCATION, domainHandler.isConnected());
 
-            if (!addressManager->getRootPlaceID().isNull()) {
-                const QString PLACE_ID_KEY_IN_LOCATION = "place_id";
-                locationObject.insert(PLACE_ID_KEY_IN_LOCATION,
-                                      uuidStringWithoutCurlyBraces(addressManager->getRootPlaceID()));
+        if (!addressManager->getRootPlaceID().isNull()) {
+            const QString PLACE_ID_KEY_IN_LOCATION = "place_id";
+            locationObject.insert(PLACE_ID_KEY_IN_LOCATION,
+                                  uuidStringWithoutCurlyBraces(addressManager->getRootPlaceID()));
         }
-                
+
         if (!domainHandler.getUUID().isNull()) {
-                const QString DOMAIN_ID_KEY_IN_LOCATION = "domain_id";
-                locationObject.insert(DOMAIN_ID_KEY_IN_LOCATION,
-                                      uuidStringWithoutCurlyBraces(domainHandler.getUUID()));
-            }
-            
+            const QString DOMAIN_ID_KEY_IN_LOCATION = "domain_id";
+            locationObject.insert(DOMAIN_ID_KEY_IN_LOCATION,
+                                  uuidStringWithoutCurlyBraces(domainHandler.getUUID()));
+        }
+
         // in case the place/domain isn't in the database, we send the network address and port
         auto& domainSockAddr = domainHandler.getSockAddr();
         const QString NETWORK_ADRESS_KEY_IN_LOCATION = "network_address";
@@ -77,9 +77,9 @@ void DiscoverabilityManager::updateLocation() {
         const QString NETWORK_ADDRESS_PORT_IN_LOCATION = "network_port";
         locationObject.insert(NETWORK_ADDRESS_PORT_IN_LOCATION, domainSockAddr.getPort());
 
-            const QString FRIENDS_ONLY_KEY_IN_LOCATION = "friends_only";
-            locationObject.insert(FRIENDS_ONLY_KEY_IN_LOCATION, (_mode.get() == Discoverability::Friends));
-            
+        const QString FRIENDS_ONLY_KEY_IN_LOCATION = "friends_only";
+        locationObject.insert(FRIENDS_ONLY_KEY_IN_LOCATION, (_mode.get() == Discoverability::Friends));
+
         JSONCallbackParameters callbackParameters;
         callbackParameters.jsonCallbackReceiver = this;
         callbackParameters.jsonCallbackMethod = "handleHeartbeatResponse";
@@ -92,12 +92,12 @@ void DiscoverabilityManager::updateLocation() {
             _lastLocationObject = locationObject;
 
             rootObject.insert(LOCATION_KEY_IN_ROOT, locationObject);
-            
+
             apiPath = API_USER_LOCATION_PATH;
         }
 
         accountManager->sendRequest(apiPath, AccountManagerAuth::Required,
-                                       QNetworkAccessManager::PutOperation,
+                                   QNetworkAccessManager::PutOperation,
                                    callbackParameters, QJsonDocument(rootObject).toJson());
 
     } else if (UserActivityLogger::getInstance().isEnabled()) {
@@ -109,7 +109,7 @@ void DiscoverabilityManager::updateLocation() {
 
         accountManager->sendRequest(API_USER_HEARTBEAT_PATH, AccountManagerAuth::Optional,
                                    QNetworkAccessManager::PutOperation, callbackParameters);
-}
+    }
 }
 
 void DiscoverabilityManager::handleHeartbeatResponse(QNetworkReply& requestReply) {

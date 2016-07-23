@@ -21,7 +21,7 @@
 
 #define __STR2__(x) #x
 #define __STR1__(x) __STR2__(x)
-#define __LOC__ __FILE__ "("__STR1__(__LINE__)") : Warning Msg: "
+#define __LOC__ __FILE__ "(" __STR1__(__LINE__) ") : Warning Msg: "
 
 static const QString DESKTOP_LOCATION = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
 
@@ -68,7 +68,7 @@ QUrl normalizeScriptURL(const QUrl& rawScriptURL) {
     } else {
         // don't accidently support gopher
         return QUrl("");
-        }
+    }
 }
 
 QString expandScriptPath(const QString& rawPath) {
@@ -104,11 +104,11 @@ QUrl expandScriptUrl(const QUrl& rawScriptURL) {
                 url.setPath(url.path() + "/");
             }
             return url;
-    }
+        }
         return normalizedScriptURL;
     } else {
         return QUrl("");
-}
+    }
 }
 
 
@@ -123,8 +123,8 @@ void ScriptEngines::addScriptEngine(ScriptEngine* engine) {
         engine->deleteLater();
     } else {
         QMutexLocker locker(&_allScriptsMutex);
-    _allKnownScriptEngines.insert(engine);
-}
+        _allKnownScriptEngines.insert(engine);
+    }
 }
 
 void ScriptEngines::removeScriptEngine(ScriptEngine* engine) {
@@ -278,7 +278,7 @@ void ScriptEngines::loadScripts() {
         clearScripts();
         loadDefaultScripts();
         return;
-    } 
+    }
 
     // loads all saved scripts
     Settings settings;
@@ -430,7 +430,7 @@ void ScriptEngines::setScriptsLocation(const QString& scriptsLocation) {
     _scriptsModel.updateScriptsLocation(scriptsLocation);
 }
 
-void ScriptEngines::reloadAllScripts() { 
+void ScriptEngines::reloadAllScripts() {
     DependencyManager::get<ScriptCache>()->clearCache();
     emit scriptsReloading();
     stopAllScripts(true);
@@ -532,8 +532,8 @@ void ScriptEngines::launchScriptEngine(ScriptEngine* scriptEngine) {
     if (scriptEngine->isDebuggable() || (qApp->queryKeyboardModifiers() & Qt::ShiftModifier)) {
         scriptEngine->runDebuggable();
     } else {
-    scriptEngine->runInThread();
-}
+        scriptEngine->runInThread();
+    }
 }
 
 void ScriptEngines::onScriptFinished(const QString& rawScriptURL, ScriptEngine* engine) {
