@@ -96,7 +96,11 @@ public:
     AudioListenerMode getAudioListenerModeCamera() const { return FROM_CAMERA; }
     AudioListenerMode getAudioListenerModeCustom() const { return CUSTOM; }
 
-    Q_INVOKABLE void reset(bool andRecenter = false, bool andReload = true, bool andHead = true);
+    void reset(bool andRecenter = false, bool andReload = true, bool andHead = true);
+
+    Q_INVOKABLE void centerBody(); // thread-safe
+    Q_INVOKABLE void clearIKJointLimitHistory(); // thread-safe
+
     void update(float deltaTime);
     virtual void postUpdate(float deltaTime) override;
     void preDisplaySide(RenderArgs* renderArgs);
@@ -212,8 +216,8 @@ public:
     virtual void clearJointsData() override;
 
     Q_INVOKABLE void useFullAvatarURL(const QUrl& fullAvatarURL, const QString& modelName = QString());
-    Q_INVOKABLE const QUrl& getFullAvatarURLFromPreferences() const { return _fullAvatarURLFromPreferences; }
-    Q_INVOKABLE const QString& getFullAvatarModelName() const { return _fullAvatarModelName; }
+    Q_INVOKABLE QUrl getFullAvatarURLFromPreferences() const { return _fullAvatarURLFromPreferences; }
+    Q_INVOKABLE QString getFullAvatarModelName() const { return _fullAvatarModelName; }
     void resetFullAvatarURL();
 
 

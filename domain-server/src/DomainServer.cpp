@@ -389,6 +389,8 @@ void DomainServer::setupNodeListAndAssignments() {
     const QVariant* idValueVariant = valueForKeyPath(settingsMap, METAVERSE_DOMAIN_ID_KEY_PATH);
     if (idValueVariant) {
         nodeList->setSessionUUID(idValueVariant->toString());
+    } else {
+        nodeList->setSessionUUID(QUuid::createUuid()); // Use random UUID
     }
 
     connect(nodeList.data(), &LimitedNodeList::nodeAdded, this, &DomainServer::nodeAdded);
@@ -1081,9 +1083,11 @@ void DomainServer::sendHeartbeatToMetaverse(const QString& networkAddress) {
     // Setup the domain object to send to the data server
     QJsonObject domainObject;
 
-    // add the version
+    // add the versions
     static const QString VERSION_KEY = "version";
     domainObject[VERSION_KEY] = BuildInfo::VERSION;
+    static const QString PROTOCOL_VERSION_KEY = "protocol";
+    domainObject[PROTOCOL_VERSION_KEY] = protocolVersionsSignatureBase64();
 
     // add networking
     if (!networkAddress.isEmpty()) {
