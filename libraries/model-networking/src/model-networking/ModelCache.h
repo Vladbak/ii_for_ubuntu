@@ -52,6 +52,7 @@ public:
     void setTextures(const QVariantMap& textureMap);
 
     virtual bool areTexturesLoaded() const;
+    const QUrl& getAnimGraphOverrideUrl() const { return _animGraphOverrideUrl; }
 
 protected:
     friend class GeometryMappingResource;
@@ -63,6 +64,8 @@ protected:
 
     // Copied to each geometry, mutable throughout lifetime via setTextures
     NetworkMaterials _materials;
+
+    QUrl _animGraphOverrideUrl;
 
 private:
     mutable bool _areTexturesLoaded { false };
@@ -107,6 +110,9 @@ public:
     void setResource(GeometryResource::Pointer resource);
 
     QUrl getURL() const { return (bool)_resource ? _resource->getURL() : QUrl(); }
+
+signals:
+    void resourceFailed();
 
 private:
     void startWatching();

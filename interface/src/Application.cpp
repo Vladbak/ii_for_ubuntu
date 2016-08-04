@@ -1701,6 +1701,17 @@ void Application::paintGL() {
         renderArgs._context->syncCache();
     }
 
+    auto framebufferCache = DependencyManager::get<FramebufferCache>();
+    // Final framebuffer that will be handled to the display-plugin
+    auto finalFramebuffer = framebufferCache->getFramebuffer();
+
+    _gpuContext->beginFrame(finalFramebuffer, getHMDSensorPose());
+    // Reset the gpu::Context Stages
+    // Back to the default framebuffer;
+    gpu::doInBatch(_gpuContext, [&](gpu::Batch& batch) {
+        batch.resetStages();
+    });
+
     auto inputs = AvatarInputs::getInstance();
     if (inputs->mirrorVisible()) {
         PerformanceTimer perfTimer("Mirror");
@@ -1723,10 +1734,6 @@ void Application::paintGL() {
         QSize size = getDeviceSize();
         renderArgs._viewport = glm::ivec4(0, 0, size.width(), size.height());
         _applicationOverlay.renderOverlay(&renderArgs);
-        auto overlayTexture = _applicationOverlay.acquireOverlay();
-        if (overlayTexture) {
-            displayPlugin->submitOverlayTexture(overlayTexture);
-        }
     }
 
     glm::vec3 boomOffset;
@@ -1828,11 +1835,7 @@ void Application::paintGL() {
     getApplicationCompositor().setFrameInfo(_frameCount, _myCamera.getTransform());
 
     // Primary rendering pass
-    auto framebufferCache = DependencyManager::get<FramebufferCache>();
     const QSize size = framebufferCache->getFrameBufferSize();
-
-    // Final framebuffer that will be handled to the display-plugin
-    auto finalFramebuffer = framebufferCache->getFramebuffer();
 
     {
         PROFILE_RANGE(__FUNCTION__ "/mainRender");
@@ -1892,6 +1895,13 @@ void Application::paintGL() {
         renderArgs._context->enableStereo(false);
     }
 
+    _gpuContext->endFrame();
+
+    gpu::TexturePointer overlayTexture = _applicationOverlay.acquireOverlay();
+    if (overlayTexture) {
+        displayPlugin->submitOverlayTexture(overlayTexture);
+    }
+
     // deliver final composited scene to the display plugin
     {
         PROFILE_RANGE(__FUNCTION__ "/pluginOutput");
@@ -1912,11 +1922,6 @@ void Application::paintGL() {
 
     {
         Stats::getInstance()->setRenderDetails(renderArgs._details);
-        // Reset the gpu::Context Stages
-        // Back to the default framebuffer;
-        gpu::doInBatch(renderArgs._context, [&](gpu::Batch& batch) {
-            batch.resetStages();
-        });
     }
 
     uint64_t lastPaintDuration = usecTimestampNow() - lastPaintBegin;
@@ -4690,6 +4695,12 @@ void Application::packetSent(quint64 length) {
 }
 
 void Application::registerScriptEngineWithApplicationServices(ScriptEngine* scriptEngine) {
+
+    scriptEngine->setEmitScriptUpdatesFunction([this]() {
+        SharedNodePointer entityServerNode = DependencyManager::get<NodeList>()->soloNodeOfType(NodeType::EntityServer);
+        return !entityServerNode || isPhysicsEnabled();
+    });
+
     // setup the packet senders and jurisdiction listeners of the script engine's scripting interfaces so
     // we can use the same ones from the application.
     auto entityScriptingInterface = DependencyManager::get<EntityScriptingInterface>();

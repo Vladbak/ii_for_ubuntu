@@ -15,7 +15,7 @@ WebEngineView {
     id: root
     property var newUrl;
 
-    profile.httpUserAgent: "Mozilla/5.0 Chrome (HighFidelityInterface)"
+    profile.httpUserAgent: "Mozilla/5.0 Chrome/38.0 (HighFidelityInterface)"
 
     Component.onCompleted: {
         console.log("Connecting JS messaging to Hifi Logging")
@@ -35,7 +35,6 @@ WebEngineView {
     }
 
     onUrlChanged: {
-        console.log("Url changed to " + url);
         var originalUrl = url.toString();
         newUrl = urlHandler.fixupUrl(originalUrl).toString();
         if (newUrl !== originalUrl) {
@@ -46,10 +45,6 @@ WebEngineView {
             }
             urlReplacementTimer.start();
         }
-    }
-
-    onFeaturePermissionRequested: {
-        grantFeaturePermission(securityOrigin, feature, true);
     }
 
     onLoadingChanged: {
