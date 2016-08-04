@@ -107,7 +107,7 @@ DomainServer::DomainServer(int argc, char* argv[]) :
     connect(&_settingsManager, &DomainServerSettingsManager::updateNodePermissions,
             &_gatekeeper, &DomainGatekeeper::updateNodePermissions);
 
-    setupGroupCacheRefresh();
+    //UTII disable: setupGroupCacheRefresh();
 
     // if we were given a certificate/private key or oauth credentials they must succeed
     if (!(optionallyReadX509KeyAndCertificate() && optionallySetupOAuth())) {
