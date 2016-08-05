@@ -17,30 +17,30 @@ macro(install_beside_console)
         TARGETS ${TARGET_NAME}
         RUNTIME DESTINATION ${COMPONENT_INSTALL_DIR}
         LIBRARY DESTINATION ${CONSOLE_PLUGIN_INSTALL_DIR}
-        COMPONENT ${SERVER_COMPONENT}
+        COMPONENT ${CLIENT_COMPONENT}
       )
     else ()
       # setup install of executable and things copied by fixup/windeployqt
       install(
         FILES "$<TARGET_FILE_DIR:${TARGET_NAME}>/"
         DESTINATION ${COMPONENT_INSTALL_DIR}
-        COMPONENT ${SERVER_COMPONENT}
+        COMPONENT ${CLIENT_COMPONENT}
       )
 
       # on windows for PR and production builds, sign the executable
-      set(EXECUTABLE_COMPONENT ${SERVER_COMPONENT})
+      set(EXECUTABLE_COMPONENT ${CLIENT_COMPONENT})
       optional_win_executable_signing()
     endif ()
 
-    if (TARGET_NAME STREQUAL domain-server)
-      # install the resources folder for the domain-server where its executable will be
-      install(
-        DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/resources
-        DESTINATION ${COMPONENT_INSTALL_DIR}
-        USE_SOURCE_PERMISSIONS
-        COMPONENT ${SERVER_COMPONENT}
-      )
-    endif ()
+#UTII    if (TARGET_NAME STREQUAL domain-server)
+#UTII      # install the resources folder for the domain-server where its executable will be
+#UTII      install(
+#UTII        DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/resources
+#UTII        DESTINATION ${COMPONENT_INSTALL_DIR}
+#UTII        USE_SOURCE_PERMISSIONS
+#UTII        COMPONENT ${CLIENT_COMPONENT}
+#UTII      )
+#UTII    endif ()
 
     if (APPLE)
       find_program(MACDEPLOYQT_COMMAND macdeployqt PATHS "${QT_DIR}/bin" NO_DEFAULT_PATH)
@@ -67,7 +67,7 @@ macro(install_beside_console)
 
     # set variables used by manual ssleay library copy
     set(TARGET_INSTALL_DIR ${COMPONENT_INSTALL_DIR})
-    set(TARGET_INSTALL_COMPONENT ${SERVER_COMPONENT})
+    set(TARGET_INSTALL_COMPONENT ${CLIENT_COMPONENT})
     manually_install_openssl_for_qt()
 
   endif ()
