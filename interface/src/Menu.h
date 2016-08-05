@@ -26,7 +26,7 @@ public:
 };
 
 namespace MenuOption {
-    const QString AboutApp = "About Interface";
+    const QString AboutApp = "About Infinity Island";
     const QString AddRemoveFriends = "Add/Remove Friends...";
     const QString AddressBar = "Show Address Bar";
     const QString Animations = "Animations...";

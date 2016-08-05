@@ -129,6 +129,25 @@ public slots:
 
     static bool isSomeSubmenuShown() { return _isSomeSubmenuShown; }
 
+    void roleChanged(const QString& role)
+    {
+        if (role == "Admin") {
+            _currentRole = Admin;
+        } else if (role == "RankAndFile") {
+            _currentRole = RankAndFile;
+        } else if (role == "Trainers") {
+            _currentRole = Trainers;
+        } else if (role == "THERankAndFile") {
+            _currentRole = THERankAndFile;
+        } else if (role == "THETrainers") {
+            _currentRole = THETrainers;
+        }
+        // refresh display of items
+        setGroupingIsVisible("", true);
+        setGroupingIsVisible("Advanced", getGroupingIsVisible("Advanced"));
+        setGroupingIsVisible("Developer", getGroupingIsVisible("Developer"));
+    }
+
 protected:
     typedef void(*settingsAction)(Settings&, QAction&);
     static void loadAction(Settings& settings, QAction& action);

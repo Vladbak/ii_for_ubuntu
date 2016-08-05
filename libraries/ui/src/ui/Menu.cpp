@@ -526,10 +526,10 @@ bool Menu::getGroupingIsVisible(const QString& grouping) {
 }
 
 void Menu::setGroupingIsVisible(const QString& grouping, bool isVisible) {
-    // NOTE: Default grouping always visible
-    if (grouping.isEmpty() || grouping.isNull()) {
-        return;
-    }
+    //// NOTE: Default grouping always visible
+    //if (grouping.isEmpty() || grouping.isNull()) {
+    //    return;
+    //}
     _groupingVisible[grouping] = isVisible;
 
     for (auto action: _groupingActions[grouping]) {
