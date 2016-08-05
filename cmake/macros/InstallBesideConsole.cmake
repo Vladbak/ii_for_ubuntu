@@ -61,7 +61,7 @@ macro(install_beside_console)
 
       install(CODE "
         execute_process(COMMAND ${MACDEPLOYQT_COMMAND} ${ESCAPED_BUNDLE_NAME} -verbose=2 -executable=${ESCAPED_EXECUTABLE_NAME})"
-        COMPONENT ${SERVER_COMPONENT}
+        COMPONENT ${CLIENT_COMPONENT}
       )
     endif()
 
