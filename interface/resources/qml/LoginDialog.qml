@@ -225,47 +225,47 @@ ScrollingWindow {
                 }
             }
 
-            Item {
-                anchors { left: parent.left; right: parent.right; }
-                height: loginDialog.inputHeight
-
-                Image {
-                    id: hifiIcon
-                    source: "../images/hifi-logo-blackish.svg"
-                    width: loginDialog.inputHeight
-                    height: width
-                    sourceSize: Qt.size(width, height);
-                    anchors { verticalCenter: parent.verticalCenter; horizontalCenter: parent.horizontalCenter }
-                }
-
-                Text {
-                    anchors { verticalCenter: parent.verticalCenter; right: hifiIcon.left; margins: loginDialog.inputSpacing }
-                    text: "Password?"
-                    scale: 0.8
-                    font.underline: true
-                    color: "#e0e0e0"
-                    MouseArea {
-                        anchors { fill: parent; margins: -loginDialog.inputSpacing / 2 }
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: loginDialog.openUrl(loginDialog.rootUrl + "/users/password/new")
-                    }
-                }
-
-                Text {
-                    anchors { verticalCenter: parent.verticalCenter; left: hifiIcon.right; margins: loginDialog.inputSpacing }
-                    text: "Register"
-                    scale: 0.8
-                    font.underline: true
-                    color: "#e0e0e0"
-
-                    MouseArea {
-                        anchors { fill: parent; margins: -loginDialog.inputSpacing / 2 }
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: loginDialog.openUrl(loginDialog.rootUrl + "/signup")
-                    }
-                }
-
-            }
+//UTII            Item {
+//UTII                anchors { left: parent.left; right: parent.right; }
+//UTII                height: loginDialog.inputHeight
+//UTII
+//UTII                Image {
+//UTII                    id: hifiIcon
+//UTII                    source: "../images/hifi-logo-blackish.svg"
+//UTII                    width: loginDialog.inputHeight
+//UTII                    height: width
+//UTII                    sourceSize: Qt.size(width, height);
+//UTII                    anchors { verticalCenter: parent.verticalCenter; horizontalCenter: parent.horizontalCenter }
+//UTII                }
+//UTII
+//UTII                Text {
+//UTII                    anchors { verticalCenter: parent.verticalCenter; right: hifiIcon.left; margins: loginDialog.inputSpacing }
+//UTII                    text: "Password?"
+//UTII                    scale: 0.8
+//UTII                    font.underline: true
+//UTII                    color: "#e0e0e0"
+//UTII                    MouseArea {
+//UTII                        anchors { fill: parent; margins: -loginDialog.inputSpacing / 2 }
+//UTII                        cursorShape: Qt.PointingHandCursor
+//UTII                        onClicked: loginDialog.openUrl(loginDialog.rootUrl + "/users/password/new")
+//UTII                    }
+//UTII                }
+//UTII
+//UTII                Text {
+//UTII                    anchors { verticalCenter: parent.verticalCenter; left: hifiIcon.right; margins: loginDialog.inputSpacing }
+//UTII                    text: "Register"
+//UTII                    scale: 0.8
+//UTII                    font.underline: true
+//UTII                    color: "#e0e0e0"
+//UTII
+//UTII                    MouseArea {
+//UTII                        anchors { fill: parent; margins: -loginDialog.inputSpacing / 2 }
+//UTII                        cursorShape: Qt.PointingHandCursor
+//UTII                        onClicked: loginDialog.openUrl(loginDialog.rootUrl + "/signup")
+//UTII                    }
+//UTII                }
+//UTII
+//UTII            }
         }
     }
 
