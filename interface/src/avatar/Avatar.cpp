@@ -780,7 +780,7 @@ void Avatar::renderDisplayName(gpu::Batch& batch, const ViewFrustum& view, const
 
         {
             PROFILE_RANGE_BATCH(batch, __FUNCTION__":renderBevelCornersRect");
-            DependencyManager::get<GeometryCache>()->bindSimpleProgram(batch, false, true, true, true);
+            DependencyManager::get<GeometryCache>()->bindSimpleProgram(batch, false, false, true, true, true);
             DependencyManager::get<GeometryCache>()->renderBevelCornersRect(batch, left, bottom, width, height,
                 bevelDistance, backgroundColor);
         }
@@ -851,15 +851,55 @@ glm::vec3 Avatar::getDefaultJointTranslation(int index) const {
 }
 
 glm::quat Avatar::getAbsoluteJointRotationInObjectFrame(int index) const {
-    glm::quat rotation;
-    _skeletonModel->getAbsoluteJointRotationInRigFrame(index, rotation);
-    return Quaternions::Y_180 * rotation;
+    switch(index) {
+        case SENSOR_TO_WORLD_MATRIX_INDEX: {
+            glm::mat4 sensorToWorldMatrix = getSensorToWorldMatrix();
+            bool success;
+            Transform avatarTransform;
+            Transform::mult(avatarTransform, getParentTransform(success), getLocalTransform());
+            glm::mat4 invAvatarMat = avatarTransform.getInverseMatrix();
+            return glmExtractRotation(invAvatarMat * sensorToWorldMatrix);
+        }
+        case CONTROLLER_LEFTHAND_INDEX: {
+            Transform controllerLeftHandTransform = Transform(getControllerLeftHandMatrix());
+            return controllerLeftHandTransform.getRotation();
+        }
+        case CONTROLLER_RIGHTHAND_INDEX: {
+            Transform controllerRightHandTransform = Transform(getControllerRightHandMatrix());
+            return controllerRightHandTransform.getRotation();
+        }
+        default: {
+            glm::quat rotation;
+            _skeletonModel->getAbsoluteJointRotationInRigFrame(index, rotation);
+            return Quaternions::Y_180 * rotation;
+        }
+    }
 }
 
 glm::vec3 Avatar::getAbsoluteJointTranslationInObjectFrame(int index) const {
-    glm::vec3 translation;
-    _skeletonModel->getAbsoluteJointTranslationInRigFrame(index, translation);
-    return Quaternions::Y_180 * translation;
+    switch(index) {
+        case SENSOR_TO_WORLD_MATRIX_INDEX: {
+            glm::mat4 sensorToWorldMatrix = getSensorToWorldMatrix();
+            bool success;
+            Transform avatarTransform;
+            Transform::mult(avatarTransform, getParentTransform(success), getLocalTransform());
+            glm::mat4 invAvatarMat = avatarTransform.getInverseMatrix();
+            return extractTranslation(invAvatarMat * sensorToWorldMatrix);
+        }
+        case CONTROLLER_LEFTHAND_INDEX: {
+            Transform controllerLeftHandTransform = Transform(getControllerLeftHandMatrix());
+            return controllerLeftHandTransform.getTranslation();
+        }
+        case CONTROLLER_RIGHTHAND_INDEX: {
+            Transform controllerRightHandTransform = Transform(getControllerRightHandMatrix());
+            return controllerRightHandTransform.getTranslation();
+        }
+        default: {
+            glm::vec3 translation;
+            _skeletonModel->getAbsoluteJointTranslationInRigFrame(index, translation);
+            return Quaternions::Y_180 * translation;
+        }
+    }
 }
 
 int Avatar::getJointIndex(const QString& name) const {
@@ -867,6 +907,10 @@ int Avatar::getJointIndex(const QString& name) const {
         int result;
         QMetaObject::invokeMethod(const_cast<Avatar*>(this), "getJointIndex", Qt::BlockingQueuedConnection,
             Q_RETURN_ARG(int, result), Q_ARG(const QString&, name));
+        return result;
+    }
+    int result = getFauxJointIndex(name);
+    if (result != -1) {
         return result;
     }
     return _skeletonModel->isActive() ? _skeletonModel->getFBXGeometry().getJointIndex(name) : -1;

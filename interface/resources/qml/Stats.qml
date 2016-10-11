@@ -62,6 +62,11 @@ Item {
                     Text {
                         color: root.fontColor;
                         font.pixelSize: root.fontSize
+                        text: "Frame Rate: " + root.framerate.toFixed(2);
+                    }
+                    Text {
+                        color: root.fontColor;
+                        font.pixelSize: root.fontSize
                         text: "Render Rate: " + root.renderrate.toFixed(2);
                     }
                     Text {
@@ -98,6 +103,12 @@ Item {
                         color: root.fontColor;
                         font.pixelSize: root.fontSize
                         text: "Mbps In/Out: " + root.mbpsIn.toFixed(2) + "/" + root.mbpsOut.toFixed(2)
+                    }
+                    Text {
+                        color: root.fontColor;
+                        font.pixelSize: root.fontSize
+                        visible: root.expanded
+                        text: "Asset Mbps In/Out: " + root.assetMbpsIn.toFixed(2) + "/" + root.assetMbpsOut.toFixed(2)
                     }
                 }
             }

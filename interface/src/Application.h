@@ -43,12 +43,13 @@
 #include <ViewFrustum.h>
 #include <AbstractUriHandler.h>
 #include <shared/RateCounter.h>
+#include <ThreadSafeValueCache.h>
+#include <shared/FileLogger.h>
 
 #include "avatar/MyAvatar.h"
 #include "Bookmarks.h"
 #include "Camera.h"
 #include "ConnectionMonitor.h"
-#include "FileLogger.h"
 #include "gpu/Context.h"
 #include "Menu.h"
 #include "octree/OctreePacketProcessor.h"
@@ -64,6 +65,9 @@
 #include "ui/OverlayConductor.h"
 #include "ui/overlays/Overlays.h"
 #include "UndoStackScriptingInterface.h"
+
+#include <procedural/ProceduralSkybox.h>
+#include <model/Skybox.h>
 
 class OffscreenGLCanvas;
 class GLCanvas;
@@ -109,8 +113,6 @@ public:
     virtual MainWindow* getPrimaryWindow() override;
     virtual QOpenGLContext* getPrimaryContext() override;
     virtual bool makeRenderingContextCurrent() override;
-    virtual void releaseSceneTexture(const gpu::TexturePointer& texture) override;
-    virtual void releaseOverlayTexture(const gpu::TexturePointer& texture) override;
     virtual bool isForeground() const override;
 
     virtual DisplayPluginPointer getActiveDisplayPlugin() const override;
@@ -221,7 +223,7 @@ public:
     // the isHMDMode is true whenever we use the interface from an HMD and not a standard flat display
     // rendering of several elements depend on that
     // TODO: carry that information on the Camera as a setting
-    bool isHMDMode() const;
+    virtual bool isHMDMode() const override;
     glm::mat4 getHMDSensorPose() const;
     glm::mat4 getEyeOffset(int eye) const;
     glm::mat4 getEyeProjection(int eye) const;
@@ -248,6 +250,25 @@ public:
 
     float getAvatarSimrate() const { return _avatarSimCounter.rate(); }
     float getAverageSimsPerSecond() const { return _simCounter.rate(); }
+    
+    void takeSnapshot(bool notify, float aspectRatio = 0.0f);
+    void shareSnapshot(const QString& filename);
+
+    model::SkyboxPointer getDefaultSkybox() const { return _defaultSkybox; }
+    gpu::TexturePointer getDefaultSkyboxTexture() const { return _defaultSkyboxTexture;  }
+    gpu::TexturePointer getDefaultSkyboxAmbientTexture() const { return _defaultSkyboxAmbientTexture; }
+
+    Q_INVOKABLE void sendMousePressOnEntity(QUuid id, PointerEvent event);
+    Q_INVOKABLE void sendMouseMoveOnEntity(QUuid id, PointerEvent event);
+    Q_INVOKABLE void sendMouseReleaseOnEntity(QUuid id, PointerEvent event);
+
+    Q_INVOKABLE void sendClickDownOnEntity(QUuid id, PointerEvent event);
+    Q_INVOKABLE void sendHoldingClickOnEntity(QUuid id, PointerEvent event);
+    Q_INVOKABLE void sendClickReleaseOnEntity(QUuid id, PointerEvent event);
+
+    Q_INVOKABLE void sendHoverEnterEntity(QUuid id, PointerEvent event);
+    Q_INVOKABLE void sendHoverOverEntity(QUuid id, PointerEvent event);
+    Q_INVOKABLE void sendHoverLeaveEntity(QUuid id, PointerEvent event);
 
 signals:
     void svoImportRequested(const QString& url);
@@ -258,19 +279,21 @@ signals:
     void activeDisplayPluginChanged();
 
     void uploadRequest(QString path);
+    void receivedHifiSchemeURL(const QString& url);
 
 public slots:
     QVector<EntityItemID> pasteEntities(float x, float y, float z);
     bool exportEntities(const QString& filename, const QVector<EntityItemID>& entityIDs, const glm::vec3* givenOffset = nullptr);
     bool exportEntities(const QString& filename, float x, float y, float z, float scale);
     bool importEntities(const QString& url);
+    void updateThreadPoolCount() const;
 
     static void setLowVelocityFilter(bool lowVelocityFilter);
     Q_INVOKABLE void loadDialog();
     Q_INVOKABLE void loadScriptURLDialog() const;
     void toggleLogDialog();
     void toggleRunningScriptsWidget() const;
-    void toggleAssetServerWidget(QString filePath = "");
+    Q_INVOKABLE void showAssetServerWidget(QString filePath = "");
 
     void handleLocalServerConnection() const;
     void readArgumentsFromLocalSocket() const;
@@ -314,6 +337,10 @@ public slots:
 
     static void runTests();
 
+    QUuid getKeyboardFocusEntity() const;  // thread-safe
+    void setKeyboardFocusEntity(QUuid id);
+    void setKeyboardFocusEntity(EntityItemID entityItemID);
+
 private slots:
     void showDesktop();
     void clearDomainOctreeDetails();
@@ -348,7 +375,7 @@ private slots:
     void nodeKilled(SharedNodePointer node);
     static void packetSent(quint64 length);
     void updateDisplayMode();
-    void domainConnectionRefused(const QString& reasonMessage, int reason);
+    void domainConnectionRefused(const QString& reasonMessage, int reason, const QString& extraInfo);
 
 private:
     static void initDisplay();
@@ -374,9 +401,7 @@ private:
 
     int sendNackPackets();
 
-    void takeSnapshot();
-
-    MyAvatar* getMyAvatar() const;
+    std::shared_ptr<MyAvatar> getMyAvatar() const;
 
     void checkSkeleton() const;
 
@@ -427,7 +452,6 @@ private:
     InputPluginList _activeInputPlugins;
 
     bool _activatingDisplayPlugin { false };
-    QMap<gpu::TexturePointer, gpu::FramebufferPointer> _lockedFramebufferMap;
 
     QUndoStack _undoStack;
     UndoStackScriptingInterface _undoStackScriptingInterface;
@@ -527,7 +551,7 @@ private:
 
     DialogsManagerScriptingInterface* _dialogsManagerScriptingInterface = new DialogsManagerScriptingInterface();
 
-    EntityItemID _keyboardFocusedItem;
+    ThreadSafeValueCache<EntityItemID> _keyboardFocusedItem;
     quint64 _lastAcceptedKeyPress = 0;
     bool _isForeground = true; // starts out assumed to be in foreground
     bool _inPaint = false;
@@ -565,6 +589,10 @@ private:
     QString _returnFromFullScreenMirrorTo;
 
     ConnectionMonitor _connectionMonitor;
+
+    model::SkyboxPointer _defaultSkybox { new ProceduralSkybox() } ;
+    gpu::TexturePointer _defaultSkyboxTexture;
+    gpu::TexturePointer _defaultSkyboxAmbientTexture;
 };
 
 

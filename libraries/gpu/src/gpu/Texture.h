@@ -144,6 +144,9 @@ class Texture : public Resource {
     static std::atomic<Size> _textureCPUMemoryUsage;
     static std::atomic<Size> _allowedCPUMemoryUsage;
     static void updateTextureCPUMemoryUsage(Size prevObjectSize, Size newObjectSize);
+
+    static std::atomic<bool> _enableSparseTextures;
+    static std::atomic<bool> _enableIncrementalTextureTransfers;
 public:
     static uint32_t getTextureCPUCount();
     static Size getTextureCPUMemoryUsage();
@@ -154,6 +157,16 @@ public:
     static Size getAllowedGPUMemoryUsage();
     static void setAllowedGPUMemoryUsage(Size size);
 
+    static bool getEnableSparseTextures() { return _enableSparseTextures.load(); }
+    static bool getEnableIncrementalTextureTransfers() { return _enableIncrementalTextureTransfers.load(); }
+
+    static void setEnableSparseTextures(bool enabled);
+    static void setEnableIncrementalTextureTransfers(bool enabled);
+
+    using ExternalRecycler = std::function<void(uint32, void*)>;
+    using ExternalIdAndFence = std::pair<uint32, void*>;
+    using ExternalUpdates = std::list<ExternalIdAndFence>;
+
     class Usage {
     public:
         enum FlagBit {
@@ -161,7 +174,7 @@ public:
             NORMAL,      // Texture is a normal map
             ALPHA,      // Texture has an alpha channel
             ALPHA_MASK,       // Texture alpha channel is a Mask 0/1
-
+            EXTERNAL,
             NUM_FLAGS,  
         };
         typedef std::bitset<NUM_FLAGS> Flags;
@@ -187,6 +200,7 @@ public:
             Builder& withNormal() { _flags.set(NORMAL); return (*this); }
             Builder& withAlpha() { _flags.set(ALPHA); return (*this); }
             Builder& withAlphaMask() { _flags.set(ALPHA_MASK); return (*this); }
+            Builder& withExternal() { _flags.set(EXTERNAL); return (*this); }
         };
         Usage(const Builder& builder) : Usage(builder._flags) {}
 
@@ -195,6 +209,7 @@ public:
 
         bool isAlpha() const { return _flags[ALPHA]; }
         bool isAlphaMask() const { return _flags[ALPHA_MASK]; }
+        bool isExternal() const { return _flags[EXTERNAL]; }
 
 
         bool operator==(const Usage& usage) { return (_flags == usage._flags); }
@@ -284,6 +299,7 @@ public:
     static Texture* create2D(const Element& texelFormat, uint16 width, uint16 height, const Sampler& sampler = Sampler());
     static Texture* create3D(const Element& texelFormat, uint16 width, uint16 height, uint16 depth, const Sampler& sampler = Sampler());
     static Texture* createCube(const Element& texelFormat, uint16 width, const Sampler& sampler = Sampler());
+    static Texture* createExternal2D(const ExternalRecycler& recycler, const Sampler& sampler = Sampler());
 
     Texture();
     Texture(const Texture& buf); // deep copy of the sysmem texture
@@ -294,7 +310,7 @@ public:
     Stamp getDataStamp() const { return _storage->getStamp(); }
 
     // The theoretical size in bytes of data stored in the texture
-    Size getSize() const { return _size; }
+    Size getSize() const override { return _size; }
 
     // The actual size in bytes of data stored in the texture
     Size getStoredSize() const;
@@ -389,6 +405,8 @@ public:
     
     uint16 usedMipLevels() const { return (_maxMip - _minMip) + 1; }
 
+    const std::string& source() const { return _source; }
+    void setSource(const std::string& source) { _source = source; }
     bool setMinMip(uint16 newMinMip);
     bool incremementMinMip(uint16 count = 1);
 
@@ -447,11 +465,23 @@ public:
     // Only callable by the Backend
     void notifyMipFaceGPULoaded(uint16 level, uint8 face = 0) const { return _storage->notifyMipFaceGPULoaded(level, face); }
 
+    void setExternalTexture(uint32 externalId, void* externalFence);
+    void setExternalRecycler(const ExternalRecycler& recycler) { _externalRecycler = recycler; }
+    ExternalRecycler getExternalRecycler() const { return _externalRecycler; }
+
     const GPUObjectPointer gpuObject {};
 
-    uint32 getHardwareId() const;
+    ExternalUpdates getUpdates() const;
 
 protected:
+    // Should only be accessed internally or by the backend sync function
+    mutable Mutex _externalMutex;
+    mutable std::list<ExternalIdAndFence> _externalUpdates;
+    ExternalRecycler _externalRecycler;
+
+
+    // Not strictly necessary, but incredibly useful for debugging
+    std::string _source;
     std::unique_ptr< Storage > _storage;
 
     Stamp _stamp = 0;

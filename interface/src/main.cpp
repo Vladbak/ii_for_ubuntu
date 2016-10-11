@@ -8,6 +8,8 @@
 //  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
 //
 
+#include <thread>
+
 #include <QCommandLineParser>
 #include <QDebug>
 #include <QDir>
@@ -20,12 +22,14 @@
 #include <gl/OpenGLVersionChecker.h>
 #include <SharedUtil.h>
 
+#include <steamworks-wrapper/SteamClient.h>
+
 #include "AddressManager.h"
 #include "Application.h"
 #include "InterfaceLogging.h"
 #include "UserActivityLogger.h"
 #include "MainWindow.h"
-#include <thread>
+#include <QtCore/QProcess>
 
 #ifdef HAS_BUGSPLAT
 #include <BuildInfo.h>
@@ -118,6 +122,29 @@ int main(int argc, const char* argv[]) {
         }
     }
 
+    QCommandLineParser parser;
+    QCommandLineOption runServerOption("runServer", "Whether to run the server");
+    QCommandLineOption serverContentPathOption("serverContentPath", "Where to find server content", "serverContentPath");
+    parser.addOption(runServerOption);
+    parser.addOption(serverContentPathOption);
+    parser.parse(arguments);
+    if (parser.isSet(runServerOption)) {
+        QString applicationDirPath = QFileInfo(arguments[0]).path();
+        QString serverPath = applicationDirPath + "/server-console/server-console.exe";
+        qDebug() << "Application dir path is: " << applicationDirPath;
+        qDebug() << "Server path is: " << serverPath;
+        QStringList args;
+        if (parser.isSet(serverContentPathOption)) {
+            QString serverContentPath = QFileInfo(arguments[0]).path() + "/" + parser.value(serverContentPathOption);
+            args << "--" << "--contentPath" << serverContentPath;
+        }
+        qDebug() << QFileInfo(arguments[0]).path();
+        qDebug() << QProcess::startDetached(serverPath, args);
+
+        // Sleep a short amount of time to give the server a chance to start
+        usleep(2000000);
+    }
+
     QElapsedTimer startupTime;
     startupTime.start();
 
@@ -136,6 +163,8 @@ int main(int argc, const char* argv[]) {
     // The nature of the Application constructor means this has to be either here,
     // or in the main window ctor, before GL startup.
     Application::initPlugins(arguments);
+
+    SteamClient::init();
 
     int exitCode;
     {
@@ -201,6 +230,8 @@ int main(int argc, const char* argv[]) {
     }
 
     Application::shutdownPlugins();
+
+    SteamClient::shutdown();
 
     qCDebug(interfaceapp, "Normal exit.");
 #if !defined(DEBUG) && !defined(Q_OS_LINUX)

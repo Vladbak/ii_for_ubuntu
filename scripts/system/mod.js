@@ -1,3 +1,5 @@
+"use strict";
+
 //
 //  mod.js
 //  scripts/system/
@@ -8,12 +10,21 @@
 //  Distributed under the Apache License, Version 2.0.
 //  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
 //
+/* global Toolbars, Script, Users, Overlays, AvatarList, Controller, Camera, getControllerWorldLocation */
+
+
+(function() { // BEGIN LOCAL_SCOPE
+
+Script.include("/~/system/libraries/controllers.js");
 
 // grab the toolbar
 var toolbar = Toolbars.getToolbar("com.highfidelity.interface.toolbar.system");
 
+var ASSETS_PATH = Script.resolvePath("assets");
+var TOOLS_PATH = Script.resolvePath("assets/images/tools/");
+
 function buttonImageURL() {
-    return Script.resolvePath("assets/images/tools/" + (Users.canKick ? 'kick.svg' : 'ignore.svg'));
+    return TOOLS_PATH + (Users.canKick ? 'kick.svg' : 'ignore.svg');
 }
 
 // setup the mod button and add it to the toolbar
@@ -22,7 +33,7 @@ var button = toolbar.addButton({
     imageURL: buttonImageURL(),
     visible: true,
     buttonState: 1,
-    defaultState: 2,
+    defaultState: 1,
     hoverState: 3,
     alpha: 0.9
 });
@@ -39,7 +50,7 @@ function removeOverlays() {
     // enumerate the overlays and remove them
     var modOverlayKeys = Object.keys(modOverlays);
 
-    for (i = 0; i < modOverlayKeys.length; ++i) {
+    for (var i = 0; i < modOverlayKeys.length; ++i) {
         var avatarID = modOverlayKeys[i];
         Overlays.deleteOverlay(modOverlays[avatarID]);
     }
@@ -64,7 +75,7 @@ function buttonClicked(){
 button.clicked.connect(buttonClicked);
 
 function overlayURL() {
-    return Script.resolvePath("assets") + "/images/" + (Users.canKick ? "kick-target.svg" : "ignore-target.svg");
+    return ASSETS_PATH + "/images/" + (Users.canKick ? "kick-target.svg" : "ignore-target.svg");
 }
 
 function updateOverlays() {
@@ -72,7 +83,7 @@ function updateOverlays() {
 
         var identifiers = AvatarList.getAvatarIdentifiers();
 
-        for (i = 0; i < identifiers.length; ++i) {
+        for (var i = 0; i < identifiers.length; ++i) {
             var avatarID = identifiers[i];
 
             if (avatarID === null) {
@@ -137,8 +148,8 @@ AvatarList.avatarRemovedEvent.connect(function(avatarID){
 function handleSelectedOverlay(clickedOverlay) {
     // see this is one of our mod overlays
 
-    var modOverlayKeys = Object.keys(modOverlays)
-    for (i = 0; i < modOverlayKeys.length; ++i) {
+    var modOverlayKeys = Object.keys(modOverlays);
+    for (var i = 0; i < modOverlayKeys.length; ++i) {
         var avatarID = modOverlayKeys[i];
         var modOverlay = modOverlays[avatarID];
 
@@ -180,13 +191,9 @@ Controller.mousePressEvent.connect(function(event){
 var triggerMapping = Controller.newMapping(Script.resolvePath('') + '-click');
 
 function controllerComputePickRay(hand) {
-    var controllerPose = Controller.getPoseValue(hand);
+    var controllerPose = getControllerWorldLocation(hand, true);
     if (controllerPose.valid) {
-        var controllerPosition = Vec3.sum(Vec3.multiplyQbyV(MyAvatar.orientation, controllerPose.translation),
-                                          MyAvatar.position);
-        // This gets point direction right, but if you want general quaternion it would be more complicated:
-        var controllerDirection = Quat.getUp(Quat.multiply(MyAvatar.orientation, controllerPose.rotation));
-        return { origin: controllerPosition, direction: controllerDirection };
+        return { origin: controllerPose.position, direction: Quat.getUp(controllerPose.orientation) };
     }
 }
 
@@ -214,3 +221,5 @@ Script.scriptEnding.connect(function() {
     removeOverlays();
     triggerMapping.disable();
 });
+
+}()); // END LOCAL_SCOPE

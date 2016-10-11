@@ -34,12 +34,17 @@ using Lock = std::unique_lock<Mutex>;
 static int refCount { 0 };
 static Mutex mutex;
 static vr::IVRSystem* activeHmd { nullptr };
+static bool _openVrQuitRequested { false };
+
+bool openVrQuitRequested() {
+    return _openVrQuitRequested;
+}
 
 static const uint32_t RELEASE_OPENVR_HMD_DELAY_MS = 5000;
 
 bool isOculusPresent() {
     bool result = false;
-#if defined(Q_OS_WIN32) 
+#if defined(Q_OS_WIN32)
     HANDLE oculusServiceEvent = ::OpenEventW(SYNCHRONIZE, FALSE, L"OculusHMDConnected");
     // The existence of the service indicates a running Oculus runtime
     if (oculusServiceEvent) {
@@ -49,7 +54,7 @@ bool isOculusPresent() {
         }
         ::CloseHandle(oculusServiceEvent);
     }
-#endif 
+#endif
     return result;
 }
 
@@ -98,7 +103,17 @@ void releaseOpenVrSystem() {
             #if DEV_BUILD
                 qCDebug(displayplugins) << "OpenVR: zero refcount, deallocate VR system";
             #endif
+
+            // HACK: workaround openvr crash, call submit with an invalid texture, right before VR_Shutdown.
+            const GLuint INVALID_GL_TEXTURE_HANDLE = -1;
+            vr::Texture_t vrTexture{ (void*)INVALID_GL_TEXTURE_HANDLE, vr::API_OpenGL, vr::ColorSpace_Auto };
+            static vr::VRTextureBounds_t OPENVR_TEXTURE_BOUNDS_LEFT{ 0, 0, 0.5f, 1 };
+            static vr::VRTextureBounds_t OPENVR_TEXTURE_BOUNDS_RIGHT{ 0.5f, 0, 1, 1 };
+            vr::VRCompositor()->Submit(vr::Eye_Left, &vrTexture, &OPENVR_TEXTURE_BOUNDS_LEFT);
+            vr::VRCompositor()->Submit(vr::Eye_Right, &vrTexture, &OPENVR_TEXTURE_BOUNDS_RIGHT);
+
             vr::VR_Shutdown();
+            _openVrQuitRequested = false;
             activeHmd = nullptr;
         }
     }
@@ -112,75 +127,26 @@ static vr::IVROverlay* _overlay { nullptr };
 static QObject* _keyboardFocusObject { nullptr };
 static QString _existingText;
 static Qt::InputMethodHints _currentHints;
-extern vr::TrackedDevicePose_t _trackedDevicePose[vr::k_unMaxTrackedDeviceCount];
+extern PoseData _nextSimPoseData;
 static bool _keyboardShown { false };
 static bool _overlayRevealed { false };
 static const uint32_t SHOW_KEYBOARD_DELAY_MS = 400;
 
-void showOpenVrKeyboard(bool show = true) {
-    if (!_overlay) {
-        return;
-    }
-
-    if (show) {
-        // To avoid flickering the keyboard when a text element is only briefly selected, 
-        // show the keyboard asynchrnously after a very short delay, but only after we check 
-        // that the current focus object is still one that is text enabled
-        QTimer::singleShot(SHOW_KEYBOARD_DELAY_MS, [] {
-            auto offscreenUi = DependencyManager::get<OffscreenUi>();
-            auto currentFocus = offscreenUi->getWindow()->focusObject();
-            QInputMethodQueryEvent query(Qt::ImEnabled | Qt::ImQueryInput | Qt::ImHints);
-            qApp->sendEvent(currentFocus, &query);
-            // Current focus isn't text enabled, bail early.
-            if (!query.value(Qt::ImEnabled).toBool()) {
-                return;
-            }
-            // We're going to show the keyboard now...
-            _keyboardFocusObject = currentFocus;
-            _currentHints = Qt::InputMethodHints(query.value(Qt::ImHints).toUInt());
-            vr::EGamepadTextInputMode inputMode = vr::k_EGamepadTextInputModeNormal;
-            if (_currentHints & Qt::ImhHiddenText) {
-                inputMode = vr::k_EGamepadTextInputModePassword;
-            }
-            vr::EGamepadTextInputLineMode lineMode = vr::k_EGamepadTextInputLineModeSingleLine;
-            if (_currentHints & Qt::ImhMultiLine) {
-                lineMode = vr::k_EGamepadTextInputLineModeMultipleLines;
-            }
-            _existingText = query.value(Qt::ImSurroundingText).toString();
-
-            auto showKeyboardResult = _overlay->ShowKeyboard(inputMode, lineMode, "Keyboard", 1024,
-                _existingText.toLocal8Bit().toStdString().c_str(), false, 0);
-
-            if (vr::VROverlayError_None == showKeyboardResult) {
-                _keyboardShown = true;
-                // Try to position the keyboard slightly below where the user is looking.
-                mat4 headPose = cancelOutRollAndPitch(toGlm(_trackedDevicePose[0].mDeviceToAbsoluteTracking));
-                mat4 keyboardTransform = glm::translate(headPose, vec3(0, -0.5, -1));
-                keyboardTransform = keyboardTransform * glm::rotate(mat4(), 3.14159f / 4.0f, vec3(-1, 0, 0));
-                auto keyboardTransformVr = toOpenVr(keyboardTransform);
-                _overlay->SetKeyboardTransformAbsolute(vr::ETrackingUniverseOrigin::TrackingUniverseStanding, &keyboardTransformVr);
-            }
-        });
-    } else {
-        _keyboardFocusObject = nullptr;
-        if (_keyboardShown) {
-            _overlay->HideKeyboard();
-            _keyboardShown = false;
-        }
-    }
-}
-
-void finishOpenVrKeyboardInput() {
-    auto offscreenUi = DependencyManager::get<OffscreenUi>();
+void updateFromOpenVrKeyboardInput() {
     auto chars = _overlay->GetKeyboardText(textArray, 8192);
     auto newText = QString(QByteArray(textArray, chars));
     _keyboardFocusObject->setProperty("text", newText);
     //// TODO modify the new text to match the possible input hints:
-    //// ImhDigitsOnly  ImhFormattedNumbersOnly  ImhUppercaseOnly  ImhLowercaseOnly 
+    //// ImhDigitsOnly  ImhFormattedNumbersOnly  ImhUppercaseOnly  ImhLowercaseOnly
     //// ImhDialableCharactersOnly ImhEmailCharactersOnly  ImhUrlCharactersOnly  ImhLatinOnly
     //QInputMethodEvent event(_existingText, QList<QInputMethodEvent::Attribute>());
     //event.setCommitString(newText, 0, _existingText.size());
     //qApp->sendEvent(_keyboardFocusObject, &event);
+}
+
+void finishOpenVrKeyboardInput() {
+    auto offscreenUi = DependencyManager::get<OffscreenUi>();
+    updateFromOpenVrKeyboardInput();
     // Simulate an enter press on the top level window to trigger the action
     if (0 == (_currentHints & Qt::ImhMultiLine)) {
         qApp->sendEvent(offscreenUi->getWindow(), &QKeyEvent(QEvent::KeyPress, Qt::Key_Return, Qt::KeyboardModifiers(), QString("\n")));
@@ -198,33 +164,16 @@ void enableOpenVrKeyboard(PluginContainer* container) {
     auto offscreenUi = DependencyManager::get<OffscreenUi>();
     _overlay = vr::VROverlay();
 
-    
+
     auto menu = container->getPrimaryMenu();
     auto action = menu->getActionForOption(MenuOption::Overlays);
 
-    // When the overlays are revealed, suppress the keyboard from appearing on text focus for a tenth of a second. 
+    // When the overlays are revealed, suppress the keyboard from appearing on text focus for a tenth of a second.
     _overlayMenuConnection = QObject::connect(action, &QAction::triggered, [action] {
         if (action->isChecked()) {
             _overlayRevealed = true;
             const int KEYBOARD_DELAY_MS = 100;
             QTimer::singleShot(KEYBOARD_DELAY_MS, [&] { _overlayRevealed = false; });
-        }
-    });
-
-    _focusConnection = QObject::connect(offscreenUi->getWindow(), &QQuickWindow::focusObjectChanged, [](QObject* object) {
-        if (object != _keyboardFocusObject) {
-            showOpenVrKeyboard(false);
-        }
-    });
-
-    _focusTextConnection = QObject::connect(offscreenUi.data(), &OffscreenUi::focusTextChanged, [](bool focusText) {
-        if (_openVrDisplayActive) {
-            if (_overlayRevealed) {
-                // suppress at most one text focus event
-                _overlayRevealed = false;
-                return;
-            }
-            showOpenVrKeyboard(focusText);
         }
     });
 }
@@ -257,11 +206,16 @@ void handleOpenVrEvents() {
     while (activeHmd->PollNextEvent(&event, sizeof(event))) {
         switch (event.eventType) {
             case vr::VREvent_Quit:
+                _openVrQuitRequested = true;
                 activeHmd->AcknowledgeQuit_Exiting();
-                QMetaObject::invokeMethod(qApp, "quit");
                 break;
 
-            case vr::VREvent_KeyboardDone: 
+            case vr::VREvent_KeyboardCharInput:
+                // Make the focused field match the keyboard results, inclusive of combining characters and such.
+                updateFromOpenVrKeyboardInput();
+                break;
+
+            case vr::VREvent_KeyboardDone:
                 finishOpenVrKeyboardInput();
 
             // FALL THROUGH

@@ -72,7 +72,6 @@ public:
     MenuWrapper* getMenu(const QString& menuName);
     MenuWrapper* getSubMenuFromName(const QString& menuName, MenuWrapper* menu);
 
-    void triggerOption(const QString& menuOption);
     QAction* getActionForOption(const QString& menuOption);
 
     QAction* addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
@@ -126,6 +125,8 @@ public slots:
 
     void toggleDeveloperMenus();
     void toggleAdvancedMenus();
+    
+    void triggerOption(const QString& menuOption);
 
     static bool isSomeSubmenuShown() { return _isSomeSubmenuShown; }
 

@@ -47,6 +47,8 @@
 
 #include "Menu.h"
 
+extern bool DEV_DECIMATE_TEXTURES;
+
 Menu* Menu::getInstance() {
     return dynamic_cast<Menu*>(qApp->getWindow()->menuBar());
 }
@@ -139,7 +141,7 @@ Menu::Menu() {
     // Edit > My Asset Server
     auto assetServerAction = addActionToQMenuAndActionHash(editMenu, MenuOption::AssetServer,
                                                            Qt::CTRL | Qt::SHIFT | Qt::Key_A,
-                                                           qApp, SLOT(toggleAssetServerWidget()));
+                                                           qApp, SLOT(showAssetServerWidget()));
     auto nodeList = DependencyManager::get<NodeList>();
     QObject::connect(nodeList.data(), &NodeList::canWriteAssetsChanged, assetServerAction, &QAction::setEnabled);
     assetServerAction->setEnabled(nodeList->getThisNodeCanWriteAssets());
@@ -169,7 +171,7 @@ Menu::Menu() {
     // Avatar menu ----------------------------------
     MenuWrapper* avatarMenu = addMenu("Avatar");
     auto avatarManager = DependencyManager::get<AvatarManager>();
-    QObject* avatar = avatarManager->getMyAvatar();
+    auto avatar = avatarManager->getMyAvatar();
 
     // Avatar > Attachments...
     auto action = addActionToQMenuAndActionHash(avatarMenu, MenuOption::Attachments);
@@ -185,7 +187,7 @@ Menu::Menu() {
     addActionToQMenuAndActionHash(avatarSizeMenu,
         MenuOption::IncreaseAvatarSize,
         0, // QML Qt::Key_Plus,
-        avatar,
+        avatar.get(),
         SLOT(increaseSize()), QAction::NoRole, UNSPECIFIED_POSITION, QString(),
         ItemAccessRoles::Admin);
 
@@ -193,7 +195,7 @@ Menu::Menu() {
     addActionToQMenuAndActionHash(avatarSizeMenu,
         MenuOption::DecreaseAvatarSize,
         0, // QML Qt::Key_Minus,
-        avatar,
+        avatar.get(),
         SLOT(decreaseSize()), QAction::NoRole, UNSPECIFIED_POSITION, QString(),
         ItemAccessRoles::Admin);
 
@@ -201,7 +203,7 @@ Menu::Menu() {
     addActionToQMenuAndActionHash(avatarSizeMenu,
         MenuOption::ResetAvatarSize,
         0, // QML Qt::Key_Equal,
-        avatar,
+        avatar.get(),
         SLOT(resetSize()), QAction::NoRole, UNSPECIFIED_POSITION, QString(),
         ItemAccessRoles::Admin);
 
@@ -312,12 +314,6 @@ Menu::Menu() {
         DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/AvatarPreferencesDialog.qml"), "AvatarPreferencesDialog");
     });
 
-    // Settings > Audio...
-    action = addActionToQMenuAndActionHash(settingsMenu, "Audio...");
-    connect(action, &QAction::triggered, [] {
-        DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/AudioPreferencesDialog.qml"), "AudioPreferencesDialog");
-    });
-
     // Settings > LOD...
     action = addActionToQMenuAndActionHash(settingsMenu, "LOD...");
     connect(action, &QAction::triggered, [] {
@@ -349,7 +345,7 @@ Menu::Menu() {
     MenuWrapper* renderOptionsMenu = developerMenu->addMenu("Render");
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::WorldAxes);
     /* UTII
-    addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::Stars, 0, true);
+    addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::DefaultSkybox, 0, true);
     */
     // Developer > Render > Throttle FPS If Not Focus
     addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::ThrottleFPSIfNotFocus, 0, true);
@@ -371,7 +367,7 @@ Menu::Menu() {
     //const QString  = "1024 MB";
     //const QString  = "2048 MB";
 
-    // Developer > Render > Resolution
+    // Developer > Render > Maximum Texture Memory
     MenuWrapper* textureMenu = renderOptionsMenu->addMenu(MenuOption::RenderMaxTextureMemory);
     QActionGroup* textureGroup = new QActionGroup(textureMenu);
     textureGroup->setExclusive(true);
@@ -399,8 +395,53 @@ Menu::Menu() {
         gpu::Texture::setAllowedGPUMemoryUsage(newMaxTextureMemory);
     });
 
+#ifdef Q_OS_WIN
+    #define MIN_CORES_FOR_INCREMENTAL_TEXTURES 5
+    bool recommendedIncrementalTransfers = (QThread::idealThreadCount() >= MIN_CORES_FOR_INCREMENTAL_TEXTURES);
+    bool recommendedSparseTextures = recommendedIncrementalTransfers;
+
+    qDebug() << "[TEXTURE TRANSFER SUPPORT]"
+        << "\n\tidealThreadCount:" << QThread::idealThreadCount()
+        << "\n\tRECOMMENDED enableSparseTextures:" << recommendedSparseTextures
+        << "\n\tRECOMMENDED enableIncrementalTextures:" << recommendedIncrementalTransfers;
+
+    gpu::Texture::setEnableIncrementalTextureTransfers(recommendedIncrementalTransfers);
+    gpu::Texture::setEnableSparseTextures(recommendedSparseTextures);
+
+    // Developer > Render > Enable Dynamic Texture Management
+    {
+        auto action = addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::EnableDynamicTextureManagement, 0, recommendedSparseTextures);
+        connect(action, &QAction::triggered, [&](bool checked) {
+            qDebug() << "[TEXTURE TRANSFER SUPPORT] --- Enable Dynamic Texture Management menu option:" << checked;
+            gpu::Texture::setEnableSparseTextures(checked);
+        });
+    }
+
+    // Developer > Render > Enable Incremental Texture Transfer
+    {
+        auto action = addCheckableActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::EnableIncrementalTextureTransfer, 0, recommendedIncrementalTransfers);
+        connect(action, &QAction::triggered, [&](bool checked) {
+            qDebug() << "[TEXTURE TRANSFER SUPPORT] --- Enable Incremental Texture Transfer menu option:" << checked;
+            gpu::Texture::setEnableIncrementalTextureTransfers(checked);
+        });
+    }
+
+#else
+    qDebug() << "[TEXTURE TRANSFER SUPPORT] Incremental Texture Transfer and Dynamic Texture Management not supported on this platform.";
+#endif
+
+
+
     // Developer > Render > LOD Tools
     addActionToQMenuAndActionHash(renderOptionsMenu, MenuOption::LodTools, 0, dialogsManager.data(), SLOT(lodTools()));
+
+    // HACK enable texture decimation
+    {
+        auto action = addCheckableActionToQMenuAndActionHash(renderOptionsMenu, "Decimate Textures");
+        connect(action, &QAction::triggered, [&](bool checked) {
+            DEV_DECIMATE_TEXTURES = checked;
+        });
+    }
 
     // Developer > Assets >>>
     MenuWrapper* assetDeveloperMenu = developerMenu->addMenu("Assets");
@@ -488,38 +529,38 @@ Menu::Menu() {
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::RenderOtherLookAtVectors, 0, false);
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::FixGaze, 0, false);
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::AnimDebugDrawDefaultPose, 0, false,
-        avatar, SLOT(setEnableDebugDrawDefaultPose(bool)));
+        avatar.get(), SLOT(setEnableDebugDrawDefaultPose(bool)));
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::AnimDebugDrawAnimPose, 0, false,
-        avatar, SLOT(setEnableDebugDrawAnimPose(bool)));
+        avatar.get(), SLOT(setEnableDebugDrawAnimPose(bool)));
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::AnimDebugDrawPosition, 0, false,
-        avatar, SLOT(setEnableDebugDrawPosition(bool)));
+        avatar.get(), SLOT(setEnableDebugDrawPosition(bool)));
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::MeshVisible, 0, true,
-        avatar, SLOT(setEnableMeshVisible(bool)));
+        avatar.get(), SLOT(setEnableMeshVisible(bool)));
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::DisableEyelidAdjustment, 0, false);
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::TurnWithHead, 0, false);
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::UseAnimPreAndPostRotations, 0, true,
-        avatar, SLOT(setUseAnimPreAndPostRotations(bool)));
+        avatar.get(), SLOT(setUseAnimPreAndPostRotations(bool)));
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::EnableInverseKinematics, 0, true,
-        avatar, SLOT(setEnableInverseKinematics(bool)));
+        avatar.get(), SLOT(setEnableInverseKinematics(bool)));
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::RenderSensorToWorldMatrix, 0, false,
-        avatar, SLOT(setEnableDebugDrawSensorToWorldMatrix(bool)));
+        avatar.get(), SLOT(setEnableDebugDrawSensorToWorldMatrix(bool)));
 
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::ActionMotorControl,
-        Qt::CTRL | Qt::SHIFT | Qt::Key_K, true, avatar, SLOT(updateMotionBehaviorFromMenu()),
+        Qt::CTRL | Qt::SHIFT | Qt::Key_K, true, avatar.get(), SLOT(updateMotionBehaviorFromMenu()),
         UNSPECIFIED_POSITION, "Developer");
 
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::ScriptedMotorControl, 0, true,
-        avatar, SLOT(updateMotionBehaviorFromMenu()),
+        avatar.get(), SLOT(updateMotionBehaviorFromMenu()),
         UNSPECIFIED_POSITION, "Developer");
 
     addCheckableActionToQMenuAndActionHash(avatarDebugMenu, MenuOption::EnableCharacterController, 0, true,
-        avatar, SLOT(updateMotionBehaviorFromMenu()),
+        avatar.get(), SLOT(updateMotionBehaviorFromMenu()),
         UNSPECIFIED_POSITION, "Developer");
 
     // Developer > Hands >>>
     MenuWrapper* handOptionsMenu = developerMenu->addMenu("Hands");
     addCheckableActionToQMenuAndActionHash(handOptionsMenu, MenuOption::DisplayHandTargets, 0, false,
-        avatar, SLOT(setEnableDebugDrawHandControllers(bool)));
+        avatar.get(), SLOT(setEnableDebugDrawHandControllers(bool)));
     addCheckableActionToQMenuAndActionHash(handOptionsMenu, MenuOption::LowVelocityFilter, 0, true,
         qApp, SLOT(setLowVelocityFilter(bool)));
 
@@ -534,6 +575,11 @@ Menu::Menu() {
 
     // Developer > Network >>>
     MenuWrapper* networkMenu = developerMenu->addMenu("Network");
+    action = addActionToQMenuAndActionHash(networkMenu, MenuOption::Networking);
+    connect(action, &QAction::triggered, [] {
+        DependencyManager::get<OffscreenUi>()->toggle(QUrl("hifi/dialogs/NetworkingPreferencesDialog.qml"),
+                                                      "NetworkingPreferencesDialog");
+    });
     addActionToQMenuAndActionHash(networkMenu, MenuOption::ReloadContent, 0, qApp, SLOT(reloadResourceCaches()));
     addCheckableActionToQMenuAndActionHash(networkMenu,
         MenuOption::DisableActivityLogger,
@@ -581,6 +627,12 @@ Menu::Menu() {
 
     // Developer > Audio >>>
     MenuWrapper* audioDebugMenu = developerMenu->addMenu("Audio");
+
+    action = addActionToQMenuAndActionHash(audioDebugMenu, "Buffers...");
+    connect(action, &QAction::triggered, [] {
+        DependencyManager::get<OffscreenUi>()->toggle(QString("hifi/dialogs/AudioPreferencesDialog.qml"), "AudioPreferencesDialog");
+    });
+
     addCheckableActionToQMenuAndActionHash(audioDebugMenu, MenuOption::AudioNoiseReduction, 0, true, 
         audioIO.data(), SLOT(toggleAudioNoiseReduction()));
     addCheckableActionToQMenuAndActionHash(audioDebugMenu, MenuOption::EchoServerAudio, 0, false,

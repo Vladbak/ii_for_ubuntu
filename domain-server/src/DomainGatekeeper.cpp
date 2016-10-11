@@ -317,6 +317,7 @@ SharedNodePointer DomainGatekeeper::processAssignmentConnectRequest(const NodeCo
 }
 
 const QString MAXIMUM_USER_CAPACITY = "security.maximum_user_capacity";
+const QString MAXIMUM_USER_CAPACITY_REDIRECT_LOCATION = "security.maximum_user_capacity_redirect_location";
 
 SharedNodePointer DomainGatekeeper::processAgentConnectRequest(const NodeConnectionData& nodeConnection,
                                                                const QString& username,
@@ -363,7 +364,7 @@ SharedNodePointer DomainGatekeeper::processAgentConnectRequest(const NodeConnect
 
     if (!userPerms.can(NodePermissions::Permission::canConnectToDomain)) {
         sendConnectionDeniedPacket("You lack the required permissions to connect to this domain.",
-                                   nodeConnection.senderSockAddr, DomainHandler::ConnectionRefusedReason::TooManyUsers);
+                nodeConnection.senderSockAddr, DomainHandler::ConnectionRefusedReason::NotAuthorized);
 #ifdef WANT_DEBUG
         qDebug() << "stalling login due to permissions:" << username;
 #endif
@@ -372,8 +373,16 @@ SharedNodePointer DomainGatekeeper::processAgentConnectRequest(const NodeConnect
 
     if (!userPerms.can(NodePermissions::Permission::canConnectPastMaxCapacity) && !isWithinMaxCapacity()) {
         // we can't allow this user to connect because we are at max capacity
+        QString redirectOnMaxCapacity;
+        const QVariant* redirectOnMaxCapacityVariant =
+            valueForKeyPath(_server->_settingsManager.getSettingsMap(), MAXIMUM_USER_CAPACITY_REDIRECT_LOCATION);
+        if (redirectOnMaxCapacityVariant && redirectOnMaxCapacityVariant->canConvert<QString>()) {
+            redirectOnMaxCapacity = redirectOnMaxCapacityVariant->toString();
+            qDebug() << "Redirection domain:" << redirectOnMaxCapacity;
+        }
+
         sendConnectionDeniedPacket("Too many connected users.", nodeConnection.senderSockAddr,
-                                   DomainHandler::ConnectionRefusedReason::TooManyUsers);
+                DomainHandler::ConnectionRefusedReason::TooManyUsers, redirectOnMaxCapacity);
 #ifdef WANT_DEBUG
         qDebug() << "stalling login due to max capacity:" << username;
 #endif
@@ -509,9 +518,7 @@ bool DomainGatekeeper::verifyUserSignature(const QString& username,
         }
     } else {
         if (!senderSockAddr.isNull()) {
-            qDebug() << "Insufficient data to decrypt username signature - denying connection.";
-            sendConnectionDeniedPacket("Insufficient data", senderSockAddr,
-                DomainHandler::ConnectionRefusedReason::LoginError);
+            qDebug() << "Insufficient data to decrypt username signature - delaying connection.";
         }
     }
 
@@ -625,22 +632,30 @@ void DomainGatekeeper::sendProtocolMismatchConnectionDenial(const HifiSockAddr& 
 }
 
 void DomainGatekeeper::sendConnectionDeniedPacket(const QString& reason, const HifiSockAddr& senderSockAddr,
-                                                  DomainHandler::ConnectionRefusedReason reasonCode) {
+                                                  DomainHandler::ConnectionRefusedReason reasonCode,
+                                                  QString extraInfo) {
     // this is an agent and we've decided we won't let them connect - send them a packet to deny connection
-    QByteArray utfString = reason.toUtf8();
-    quint16 payloadSize = utfString.size();
+    QByteArray utfReasonString = reason.toUtf8();
+    quint16 reasonSize = utfReasonString.size();
+
+    QByteArray utfExtraInfo = extraInfo.toUtf8();
+    quint16 extraInfoSize = utfExtraInfo.size();
 
     // setup the DomainConnectionDenied packet
     auto connectionDeniedPacket = NLPacket::create(PacketType::DomainConnectionDenied,
-                                                   payloadSize + sizeof(payloadSize) + sizeof(uint8_t));
+                                            sizeof(uint8_t) + // reasonCode
+                                            reasonSize + sizeof(reasonSize) +
+                                            extraInfoSize + sizeof(extraInfoSize));
 
     // pack in the reason the connection was denied (the client displays this)
-    if (payloadSize > 0) {
-        uint8_t reasonCodeWire = (uint8_t)reasonCode;
-        connectionDeniedPacket->writePrimitive(reasonCodeWire);
-        connectionDeniedPacket->writePrimitive(payloadSize);
-        connectionDeniedPacket->write(utfString);
-    }
+    uint8_t reasonCodeWire = (uint8_t)reasonCode;
+    connectionDeniedPacket->writePrimitive(reasonCodeWire);
+    connectionDeniedPacket->writePrimitive(reasonSize);
+    connectionDeniedPacket->write(utfReasonString);
+
+    // write the extra info as well
+    connectionDeniedPacket->writePrimitive(extraInfoSize);
+    connectionDeniedPacket->write(utfExtraInfo);
 
     // send the packet off
     DependencyManager::get<LimitedNodeList>()->sendPacket(std::move(connectionDeniedPacket), senderSockAddr);
@@ -756,6 +771,21 @@ void DomainGatekeeper::getGroupMemberships(const QString& username) {
     // loop through the groups mentioned on the settings page and ask if this user is in each.  The replies
     // will be received asynchronously and permissions will be updated as the answers come in.
 
+    QJsonObject json;
+    QSet<QString> groupIDSet;
+    foreach (QUuid groupID, _server->_settingsManager.getGroupIDs() + _server->_settingsManager.getBlacklistGroupIDs()) {
+        groupIDSet += groupID.toString().mid(1,36);
+    }
+
+    if (groupIDSet.isEmpty()) {
+        // if no groups are in the permissions settings, don't ask who is in which groups.
+        return;
+    }
+
+    QJsonArray groupIDs = QJsonArray::fromStringList(groupIDSet.toList());
+    json["groups"] = groupIDs;
+
+
     // if we've already asked, wait for the answer before asking again
     QString lowerUsername = username.toLower();
     if (_inFlightGroupMembershipsRequests.contains(lowerUsername)) {
@@ -764,13 +794,6 @@ void DomainGatekeeper::getGroupMemberships(const QString& username) {
     }
     _inFlightGroupMembershipsRequests += lowerUsername;
 
-    QJsonObject json;
-    QSet<QString> groupIDSet;
-    foreach (QUuid groupID, _server->_settingsManager.getGroupIDs() + _server->_settingsManager.getBlacklistGroupIDs()) {
-        groupIDSet += groupID.toString().mid(1,36);
-    }
-    QJsonArray groupIDs = QJsonArray::fromStringList(groupIDSet.toList());
-    json["groups"] = groupIDs;
 
     JSONCallbackParameters callbackParams;
     callbackParams.jsonCallbackReceiver = this;

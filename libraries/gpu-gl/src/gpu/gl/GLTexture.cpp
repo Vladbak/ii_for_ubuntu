@@ -11,16 +11,17 @@
 #include <NumericalConstants.h>
 
 #include "GLTextureTransfer.h"
+#include "GLBackend.h"
 
 using namespace gpu;
 using namespace gpu::gl;
 
 std::shared_ptr<GLTextureTransferHelper> GLTexture::_textureTransferHelper;
-static std::map<uint16, size_t> _textureCountByMips;
-static uint16 _currentMaxMipCount { 0 };
 
 // FIXME placeholder for texture memory over-use
 #define DEFAULT_MAX_MEMORY_MB 256
+#define MIN_FREE_GPU_MEMORY_PERCENTAGE 0.25f
+#define OVER_MEMORY_PRESSURE 2.0f
 
 const GLenum GLTexture::CUBE_FACE_LAYOUT[6] = {
     GL_TEXTURE_CUBE_MAP_POSITIVE_X, GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
@@ -93,23 +94,37 @@ const std::vector<GLenum>& GLTexture::getFaceTargets(GLenum target) {
     return faceTargets;
 }
 
+
 float GLTexture::getMemoryPressure() {
     // Check for an explicit memory limit
     auto availableTextureMemory = Texture::getAllowedGPUMemoryUsage();
 
     // If no memory limit has been set, use a percentage of the total dedicated memory
     if (!availableTextureMemory) {
-        auto totalGpuMemory = gpu::gl::getDedicatedMemory();
+        auto totalGpuMemory = getDedicatedMemory();
 
-        // If no limit has been explicitly set, and the dedicated memory can't be determined, 
-        // just use a fallback fixed value of 256 MB
         if (!totalGpuMemory) {
+            // If we can't query the dedicated memory just use a fallback fixed value of 256 MB
             totalGpuMemory = MB_TO_BYTES(DEFAULT_MAX_MEMORY_MB);
+        } else {
+            // Check the global free GPU memory
+            auto freeGpuMemory = getFreeDedicatedMemory();
+            if (freeGpuMemory) {
+                static gpu::Size lastFreeGpuMemory = 0;
+                auto freePercentage = (float)freeGpuMemory / (float)totalGpuMemory;
+                if (freeGpuMemory != lastFreeGpuMemory) {
+                    lastFreeGpuMemory = freeGpuMemory;
+                    if (freePercentage < MIN_FREE_GPU_MEMORY_PERCENTAGE) {
+                        qDebug() << "Exceeded max GPU memory";
+                        return OVER_MEMORY_PRESSURE;
+                    }
+                }
+            }
         }
 
-        // Allow 75% of all available GPU memory to be consumed by textures
+        // Allow 50% of all available GPU memory to be consumed by textures
         // FIXME overly conservative?
-        availableTextureMemory = (totalGpuMemory >> 2) * 3;
+        availableTextureMemory = (totalGpuMemory >> 1);
     }
 
     // Return the consumed texture memory divided by the available texture memory.
@@ -117,82 +132,65 @@ float GLTexture::getMemoryPressure() {
     return (float)consumedGpuMemory / (float)availableTextureMemory;
 }
 
-GLTexture::DownsampleSource::DownsampleSource(GLTexture* oldTexture) :
-    _texture(oldTexture ? oldTexture->takeOwnership() : 0),
-    _minMip(oldTexture ? oldTexture->_minMip : 0),
-    _maxMip(oldTexture ? oldTexture->_maxMip : 0)
-{
-}
 
-GLTexture::DownsampleSource::~DownsampleSource() {
-    if (_texture) {
-        glDeleteTextures(1, &_texture);
-        Backend::decrementTextureGPUCount();
-    }
-}
-
-GLTexture::GLTexture(const gpu::Texture& texture, GLuint id, GLTexture* originalTexture, bool transferrable) :
-    GLObject(texture, id),
+// Create the texture and allocate storage
+GLTexture::GLTexture(const std::weak_ptr<GLBackend>& backend, const Texture& texture, GLuint id, bool transferrable) :
+    GLObject(backend, texture, id),
+    _external(false),
+    _source(texture.source()),
     _storageStamp(texture.getStamp()),
     _target(getGLTextureType(texture)),
+    _internalFormat(gl::GLTexelFormat::evalGLTexelFormatInternal(texture.getTexelFormat())),
     _maxMip(texture.maxMip()),
     _minMip(texture.minMip()),
     _virtualSize(texture.evalTotalSize()),
-    _transferrable(transferrable),
-    _downsampleSource(originalTexture)
+    _transferrable(transferrable)
 {
-    if (_transferrable) {
-        uint16 mipCount = usedMipLevels();
-        _currentMaxMipCount = std::max(_currentMaxMipCount, mipCount);
-        if (!_textureCountByMips.count(mipCount)) {
-            _textureCountByMips[mipCount] = 1;
-        } else {
-            ++_textureCountByMips[mipCount];
-        }
-    } 
+    auto strongBackend = _backend.lock();
+    strongBackend->recycle();
     Backend::incrementTextureGPUCount();
     Backend::updateTextureGPUVirtualMemoryUsage(0, _virtualSize);
-}
-
-
-// Create the texture and allocate storage
-GLTexture::GLTexture(const Texture& texture, GLuint id, bool transferrable) :
-    GLTexture(texture, id, nullptr, transferrable)
-{
-    // FIXME, do during allocation
-    //Backend::updateTextureGPUMemoryUsage(0, _size);
     Backend::setGPUObject(texture, this);
 }
 
-// Create the texture and copy from the original higher resolution version
-GLTexture::GLTexture(const gpu::Texture& texture, GLuint id, GLTexture* originalTexture) :
-    GLTexture(texture, id, originalTexture, originalTexture->_transferrable)
+GLTexture::GLTexture(const std::weak_ptr<GLBackend>& backend, const Texture& texture, GLuint id) :
+    GLObject(backend, texture, id),
+    _external(true),
+    _source(texture.source()),
+    _storageStamp(0),
+    _target(getGLTextureType(texture)),
+    _internalFormat(GL_RGBA8),
+    // FIXME force mips to 0?
+    _maxMip(texture.maxMip()),
+    _minMip(texture.minMip()),
+    _virtualSize(0),
+    _transferrable(false) 
 {
-    Q_ASSERT(_minMip >= originalTexture->_minMip);
-    // Set the GPU object last because that implicitly destroys the originalTexture object
     Backend::setGPUObject(texture, this);
+
+    // FIXME Is this necessary?
+    //withPreservedTexture([this] {
+    //    syncSampler();
+    //    if (_gpuObject.isAutogenerateMips()) {
+    //        generateMips();
+    //    }
+    //});
 }
 
 GLTexture::~GLTexture() {
-    if (_transferrable) {
-        uint16 mipCount = usedMipLevels();
-        Q_ASSERT(_textureCountByMips.count(mipCount));
-        auto& numTexturesForMipCount = _textureCountByMips[mipCount];
-        --numTexturesForMipCount;
-        if (0 == numTexturesForMipCount) {
-            _textureCountByMips.erase(mipCount);
-            if (mipCount == _currentMaxMipCount) {
-                _currentMaxMipCount = (_textureCountByMips.empty() ? 0 : _textureCountByMips.rbegin()->first);
+    auto backend = _backend.lock();
+    if (backend) {
+        if (_external) {
+            auto recycler = _gpuObject.getExternalRecycler();
+            if (recycler) {
+                backend->releaseExternalTexture(_id, recycler);
+            } else {
+                qWarning() << "No recycler available for texture " << _id << " possible leak";
             }
+        } else if (_id) {
+            backend->releaseTexture(_id, _size);
         }
     }
-
-    if (_id) {
-        glDeleteTextures(1, &_id);
-        const_cast<GLuint&>(_id) = 0;
-        Backend::decrementTextureGPUCount();
-    }
-    Backend::updateTextureGPUMemoryUsage(_size, 0);
     Backend::updateTextureGPUVirtualMemoryUsage(_virtualSize, 0);
 }
 
@@ -203,6 +201,28 @@ void GLTexture::createTexture() {
         syncSampler();
         (void)CHECK_GL_ERROR();
     });
+}
+
+void GLTexture::withPreservedTexture(std::function<void()> f) const {
+    GLint boundTex = -1;
+    switch (_target) {
+        case GL_TEXTURE_2D:
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &boundTex);
+            break;
+
+        case GL_TEXTURE_CUBE_MAP:
+            glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &boundTex);
+            break;
+
+        default:
+            qFatal("Unsupported texture type");
+    }
+    (void)CHECK_GL_ERROR();
+
+    glBindTexture(_target, _texture);
+    f();
+    glBindTexture(_target, boundTex);
+    (void)CHECK_GL_ERROR();
 }
 
 void GLTexture::setSize(GLuint size) const {
@@ -218,35 +238,14 @@ bool GLTexture::isOutdated() const {
     return GLSyncState::Idle == _syncState && _contentStamp < _gpuObject.getDataStamp();
 }
 
-bool GLTexture::isOverMaxMemory() const {
-    // FIXME switch to using the max mip count used from the previous frame
-    if (usedMipLevels() < _currentMaxMipCount) {
-        return false;
-    }
-    Q_ASSERT(usedMipLevels() == _currentMaxMipCount);
-
-    if (getMemoryPressure() < 1.0f) {
-        return false;
-    }
-
-    return true;
-}
-
 bool GLTexture::isReady() const {
     // If we have an invalid texture, we're never ready
     if (isInvalid()) {
         return false;
     }
 
-    // If we're out of date, but the transfer is in progress, report ready
-    // as a special case
     auto syncState = _syncState.load();
-
-    if (isOutdated()) {
-        return Idle != syncState;
-    }
-
-    if (Idle != syncState) {
+    if (isOutdated() || Idle != syncState) {
         return false;
     }
 
@@ -258,11 +257,6 @@ bool GLTexture::isReady() const {
 void GLTexture::postTransfer() {
     setSyncState(GLSyncState::Idle);
     ++_transferCount;
-
-    //// The public gltexture becaomes available
-    //_id = _privateTexture;
-
-    _downsampleSource.reset();
 
     // At this point the mip pixels have been loaded, we can notify the gpu texture to abandon it's memory
     switch (_gpuObject.getType()) {
@@ -294,3 +288,14 @@ void GLTexture::postTransfer() {
 void GLTexture::initTextureTransferHelper() {
     _textureTransferHelper = std::make_shared<GLTextureTransferHelper>();
 }
+
+void GLTexture::startTransfer() {
+    createTexture();
+}
+
+void GLTexture::finishTransfer() {
+    if (_gpuObject.isAutogenerateMips()) {
+        generateMips();
+    }
+}
+

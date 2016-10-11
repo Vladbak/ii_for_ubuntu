@@ -117,10 +117,12 @@ void Stats::updateStats(bool force) {
     // we need to take one avatar out so we don't include ourselves
     STAT_UPDATE(avatarCount, avatarManager->size() - 1);
     STAT_UPDATE(serverCount, (int)nodeList->size());
-    STAT_UPDATE(renderrate, qApp->getFps());
+    STAT_UPDATE(framerate, qApp->getFps());
     if (qApp->getActiveDisplayPlugin()) {
-        STAT_UPDATE(presentrate, qApp->getActiveDisplayPlugin()->presentRate());
-        STAT_UPDATE(presentnewrate, qApp->getActiveDisplayPlugin()->newFramePresentRate());
+        auto displayPlugin = qApp->getActiveDisplayPlugin();
+        STAT_UPDATE(renderrate, displayPlugin->renderRate());
+        STAT_UPDATE(presentrate, displayPlugin->presentRate());
+        STAT_UPDATE(presentnewrate, displayPlugin->newFramePresentRate());
         STAT_UPDATE(presentdroprate, qApp->getActiveDisplayPlugin()->droppedFrameRate());
     } else {
         STAT_UPDATE(presentrate, -1);
@@ -135,6 +137,9 @@ void Stats::updateStats(bool force) {
     STAT_UPDATE(packetOutCount, bandwidthRecorder->getCachedTotalAverageOutputPacketsPerSecond());
     STAT_UPDATE_FLOAT(mbpsIn, (float)bandwidthRecorder->getCachedTotalAverageInputKilobitsPerSecond() / 1000.0f, 0.01f);
     STAT_UPDATE_FLOAT(mbpsOut, (float)bandwidthRecorder->getCachedTotalAverageOutputKilobitsPerSecond() / 1000.0f, 0.01f);
+
+    STAT_UPDATE_FLOAT(assetMbpsIn, (float)bandwidthRecorder->getAverageInputKilobitsPerSecond(NodeType::AssetServer) / 1000.0f, 0.01f);
+    STAT_UPDATE_FLOAT(assetMbpsOut, (float)bandwidthRecorder->getAverageOutputKilobitsPerSecond(NodeType::AssetServer) / 1000.0f, 0.01f);
 
     // Second column: ping
     SharedNodePointer audioMixerNode = nodeList->soloNodeOfType(NodeType::AudioMixer);
@@ -165,7 +170,7 @@ void Stats::updateStats(bool force) {
     STAT_UPDATE(entitiesPing, octreeServerCount ? totalPingOctree / octreeServerCount : -1);
 
     // Third column, avatar stats
-    MyAvatar* myAvatar = avatarManager->getMyAvatar();
+    auto myAvatar = avatarManager->getMyAvatar();
     glm::vec3 avatarPos = myAvatar->getPosition();
     STAT_UPDATE(position, QVector3D(avatarPos.x, avatarPos.y, avatarPos.z));
     STAT_UPDATE_FLOAT(speed, glm::length(myAvatar->getVelocity()), 0.01f);

@@ -20,6 +20,7 @@
 #include <GLMHelpers.h>
 #include <RegisteredMetaTypes.h>
 #include <shared/Bilateral.h>
+#include <gpu/Forward.h>
 
 #include "Plugin.h"
 
@@ -91,11 +92,6 @@ public:
         return glm::mat4();
     }
 
-    // Needed for timewarp style features
-    virtual void setEyeRenderPose(uint32_t frameIndex, Eye eye, const glm::mat4& pose) {
-        // NOOP
-    }
-
     virtual void abandonCalibration() {}
 
     virtual void resetSensors() {}
@@ -132,6 +128,7 @@ public:
         Present = QEvent::User + 1
     };
 
+    virtual int getRequiredThreadCount() const { return 0; }
     virtual bool isHmd() const { return false; }
     virtual int getHmdScreen() const { return -1; }
     /// By default, all HMDs are stereo
@@ -149,16 +146,8 @@ public:
     virtual QString getPreferredAudioOutDevice() const { return QString(); }
 
     // Rendering support
-
-    /**
-     *  Sends the scene texture to the display plugin.
-     */
-    virtual void submitSceneTexture(uint32_t frameIndex, const gpu::TexturePointer& sceneTexture) = 0;
-
-    /**
-    *  Sends the scene texture to the display plugin.
-    */
-    virtual void submitOverlayTexture(const gpu::TexturePointer& overlayTexture) = 0;
+    virtual void setContext(const gpu::ContextPointer& context) final { _gpuContext = context; }
+    virtual void submitFrame(const gpu::FramePointer& newFrame) = 0;
 
     // Does the rendering surface have current focus?
     virtual bool hasFocus() const = 0;
@@ -184,12 +173,14 @@ public:
     }
 
     // Fetch the most recently displayed image as a QImage
-    virtual QImage getScreenshot() const = 0;
+    virtual QImage getScreenshot(float aspectRatio = 0.0f) const = 0;
 
     // will query the underlying hmd api to compute the most recent head pose
     virtual bool beginFrameRender(uint32_t frameIndex) { return true; }
 
     virtual float devicePixelRatio() { return 1.0f; }
+    // Rate at which we render frames
+    virtual float renderRate() const { return -1.0f; }
     // Rate at which we present to the display device
     virtual float presentRate() const { return -1.0f; }
     // Rate at which new frames are being presented to the display device
@@ -211,6 +202,8 @@ signals:
 
 protected:
     void incrementPresentCount();
+
+    gpu::ContextPointer _gpuContext;
 
 private:
     std::atomic<uint32_t> _presentedFrameIndex;

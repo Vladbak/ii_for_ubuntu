@@ -35,11 +35,11 @@ public:
 
 public slots:
     /// threaded run of assignment
-    void run();
+    void run() override;
 
-    void sendStatsPacket();
+    void sendStatsPacket() override;
 
-    static const InboundAudioStream::Settings& getStreamSettings() { return _streamSettings; }
+    static int getStaticJitterFrames() { return _numStaticJitterFrames; }
 
 private slots:
     void broadcastMixes();
@@ -112,7 +112,7 @@ private:
     };
     QVector<ReverbSettings> _zoneReverbSettings;
 
-    static InboundAudioStream::Settings _streamSettings;
+    static int _numStaticJitterFrames; // -1 denotes dynamic jitter buffering
 
     static bool _enableFilter;
 };

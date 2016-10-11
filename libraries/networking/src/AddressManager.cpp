@@ -17,6 +17,7 @@
 #include <QStringList>
 
 #include <GLMHelpers.h>
+#include <NumericalConstants.h>
 #include <SettingHandle.h>
 #include <UUID.h>
 
@@ -46,7 +47,7 @@ bool AddressManager::isConnected() {
     return DependencyManager::get<NodeList>()->getDomainHandler().isConnected();
 }
 
-const QUrl AddressManager::currentAddress() const {
+QUrl AddressManager::currentAddress() const {
     QUrl hifiURL;
 
     hifiURL.setScheme(HIFI_URL_SCHEME);
@@ -57,6 +58,37 @@ const QUrl AddressManager::currentAddress() const {
     }
     
     hifiURL.setPath(currentPath());
+
+    return hifiURL;
+}
+
+QUrl AddressManager::currentFacingAddress() const {
+    auto hifiURL = currentAddress();
+    hifiURL.setPath(currentFacingPath());
+
+    return hifiURL;
+}
+
+
+QUrl AddressManager::currentShareableAddress() const {
+    if (!_shareablePlaceName.isEmpty()) {
+        // if we have a shareable place name use that instead of whatever the current host is
+        QUrl hifiURL;
+
+        hifiURL.setScheme(HIFI_URL_SCHEME);
+        hifiURL.setHost(_shareablePlaceName);
+
+        hifiURL.setPath(currentPath());
+
+        return hifiURL;
+    } else {
+        return currentAddress();
+    }
+}
+
+QUrl AddressManager::currentFacingShareableAddress() const {
+    auto hifiURL = currentShareableAddress();
+    hifiURL.setPath(currentFacingPath());
 
     return hifiURL;
 }
@@ -97,7 +129,7 @@ void AddressManager::storeCurrentAddress() {
     currentAddressHandle.set(currentAddress());
 }
 
-const QString AddressManager::currentPath(bool withOrientation) const {
+QString AddressManager::currentPath(bool withOrientation) const {
 
     if (_positionGetter) {
         QString pathString = "/" + createByteArray(_positionGetter());
@@ -117,6 +149,25 @@ const QString AddressManager::currentPath(bool withOrientation) const {
     } else {
         qCDebug(networking) << "Cannot create address path without a getter for position."
             << "Call AddressManager::setPositionGetter to pass a function that will return a const glm::vec3&";
+        return QString();
+    }
+}
+
+QString AddressManager::currentFacingPath() const {
+    if (_positionGetter && _orientationGetter) {
+        auto position = _positionGetter();
+        auto orientation = _orientationGetter();
+
+        // move the user a couple units away
+        const float DISTANCE_TO_USER = 2.0f;
+        position += orientation * Vectors::FRONT * DISTANCE_TO_USER;
+
+        // rotate the user by 180 degrees
+        orientation = orientation * glm::angleAxis(PI, Vectors::UP);
+
+        return "/" + createByteArray(position) + "/" + createByteArray(orientation);
+    } else {
+        qCDebug(networking) << "Cannot create address path without a getter for position/orientation.";
         return QString();
     }
 }
@@ -325,6 +376,7 @@ void AddressManager::goToAddressFromObject(const QVariantMap& dataObject, const 
 
                 LookupTrigger trigger = (LookupTrigger) reply.property(LOOKUP_TRIGGER_KEY).toInt();
 
+
                 // set our current root place id to the ID that came back
                 const QString PLACE_ID_KEY = "id";
                 _rootPlaceID = rootMap[PLACE_ID_KEY].toUuid();
@@ -332,6 +384,18 @@ void AddressManager::goToAddressFromObject(const QVariantMap& dataObject, const 
                 // set our current root place name to the name that came back
                 const QString PLACE_NAME_KEY = "name";
                 QString placeName = rootMap[PLACE_NAME_KEY].toString();
+
+                if (placeName.isEmpty()) {
+                    // we didn't get a set place name, check if there is a default or temporary domain name to use
+                    const QString TEMPORARY_DOMAIN_NAME_KEY = "name";
+                    const QString DEFAULT_DOMAIN_NAME_KEY = "default_place_name";
+
+                    if (domainObject.contains(TEMPORARY_DOMAIN_NAME_KEY)) {
+                        placeName = domainObject[TEMPORARY_DOMAIN_NAME_KEY].toString();
+                    } else if (domainObject.contains(DEFAULT_DOMAIN_NAME_KEY)) {
+                        placeName = domainObject[DEFAULT_DOMAIN_NAME_KEY].toString();
+                    }
+                }
 
                 if (!placeName.isEmpty()) {
                     if (setHost(placeName, trigger)) {
@@ -616,6 +680,9 @@ bool AddressManager::setHost(const QString& host, LookupTrigger trigger, quint16
 
         _port = port;
 
+        // any host change should clear the shareable place name
+        _shareablePlaceName.clear();
+
         if (host != _host) {
             _host = host;
             emit hostChanged(_host);
@@ -666,11 +733,65 @@ void AddressManager::refreshPreviousLookup() {
 }
 
 void AddressManager::copyAddress() {
-    QApplication::clipboard()->setText(currentAddress().toString());
+    // assume that the address is being copied because the user wants a shareable address
+    QApplication::clipboard()->setText(currentShareableAddress().toString());
 }
 
 void AddressManager::copyPath() {
     QApplication::clipboard()->setText(currentPath());
+}
+
+void AddressManager::handleShareableNameAPIResponse(QNetworkReply& requestReply) {
+    // make sure that this response is for the domain we're currently connected to
+    auto domainID = DependencyManager::get<NodeList>()->getDomainHandler().getUUID();
+
+    if (requestReply.url().toString().contains(uuidStringWithoutCurlyBraces(domainID))) {
+        // check for a name or default name in the API response
+
+        QJsonObject responseObject = QJsonDocument::fromJson(requestReply.readAll()).object();
+        QJsonObject domainObject = responseObject["domain"].toObject();
+
+        const QString DOMAIN_NAME_KEY = "name";
+        const QString DOMAIN_DEFAULT_PLACE_NAME_KEY = "default_place_name";
+
+        bool shareableNameChanged { false };
+
+        if (domainObject[DOMAIN_NAME_KEY].isString()) {
+            _shareablePlaceName = domainObject[DOMAIN_NAME_KEY].toString();
+            shareableNameChanged = true;
+        } else if (domainObject[DOMAIN_DEFAULT_PLACE_NAME_KEY].isString()) {
+            _shareablePlaceName = domainObject[DOMAIN_DEFAULT_PLACE_NAME_KEY].toString();
+            shareableNameChanged = true;
+        }
+
+        if (shareableNameChanged) {
+            qCDebug(networking) << "AddressManager shareable name changed to" << _shareablePlaceName;
+        }
+    }
+}
+
+void AddressManager::lookupShareableNameForDomainID(const QUuid& domainID) {
+
+    // if we get to a domain via IP/hostname, often the address is only reachable by this client
+    // and not by other clients on the LAN or Internet
+
+    // to work around this we use the ID to lookup the default place name, and if it exists we
+    // then use that for Steam join/invite or copiable address
+
+    // it only makes sense to lookup a shareable default name if we don't have a place name
+    if (_placeName.isEmpty()) {
+        JSONCallbackParameters callbackParams;
+
+        // no error callback handling
+        // in the case of an error we simply assume there is no default place name
+        callbackParams.jsonCallbackReceiver = this;
+        callbackParams.jsonCallbackMethod = "handleShareableNameAPIResponse";
+
+        DependencyManager::get<AccountManager>()->sendRequest(GET_DOMAIN_ID.arg(uuidStringWithoutCurlyBraces(domainID)),
+                                                              AccountManagerAuth::None,
+                                                              QNetworkAccessManager::GetOperation,
+                                                              callbackParams);
+    }
 }
 
 void AddressManager::addCurrentAddressToHistory(LookupTrigger trigger) {
@@ -715,6 +836,7 @@ void AddressManager::ifLocalSandboxRunningElse(std::function<void()> localSandbo
 
     QNetworkAccessManager& networkAccessManager = NetworkAccessManager::getInstance();
     QNetworkRequest sandboxStatus(SANDBOX_STATUS_URL);
+    sandboxStatus.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
     sandboxStatus.setHeader(QNetworkRequest::UserAgentHeader, HIGH_FIDELITY_USER_AGENT);
     QNetworkReply* reply = networkAccessManager.get(sandboxStatus);
 

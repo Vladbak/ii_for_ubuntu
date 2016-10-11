@@ -1,6 +1,4 @@
 "use strict";
-/*jslint vars: true, plusplus: true*/
-/*globals Script, Overlays, Controller, Reticle, HMD, Camera, Entities, MyAvatar, Settings, Menu, ScriptDiscoveryService, Window, Vec3, Quat, print*/
 
 //
 //  handControllerPointer.js
@@ -13,6 +11,8 @@
 //  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
 //
 
+(function() { // BEGIN LOCAL_SCOPE
+
 // Control the "mouse" using hand controller. (HMD and desktop.)
 // First-person only.
 // Starts right handed, but switches to whichever is free: Whichever hand was NOT most recently squeezed.
@@ -20,6 +20,7 @@
 // When partially squeezing over a HUD element, a laser or the reticle is shown where the active hand
 // controller beam intersects the HUD.
 
+Script.include("/~/system/libraries/controllers.js");
 
 // UTILITIES -------------
 //
@@ -121,7 +122,7 @@ function ignoreMouseActivity() {
         return true;
     }
     var pos = Reticle.position;
-    if (pos.x == -1 && pos.y == -1) {
+    if (!pos || (pos.x == -1 && pos.y == -1)) {
         return true;
     }
     // Only we know if we moved it, which is why this script has to replace depthReticle.js
@@ -203,16 +204,13 @@ function overlayFromWorldPoint(point) {
 }
 
 function activeHudPoint2d(activeHand) { // if controller is valid, update reticle position and answer 2d point. Otherwise falsey.
-    var controllerPose = Controller.getPoseValue(activeHand);
-    // Valid if any plugged-in hand controller is "on". (uncradled Hydra, green-lighted Vive...)
+    var controllerPose = getControllerWorldLocation(activeHand, true);
     if (!controllerPose.valid) {
         return; // Controller is cradled.
     }
-    var controllerPosition = Vec3.sum(Vec3.multiplyQbyV(MyAvatar.orientation, controllerPose.translation),
-                                      MyAvatar.position);
-    // This gets point direction right, but if you want general quaternion it would be more complicated:
-    var controllerDirection = Quat.getUp(Quat.multiply(MyAvatar.orientation, controllerPose.rotation));
-
+    var controllerPosition = controllerPose.position;
+    var controllerDirection = Quat.getUp(controllerPose.rotation);
+    
     var hudPoint3d = calculateRayUICollisionPoint(controllerPosition, controllerDirection);
     if (!hudPoint3d) {
         if (Menu.isOptionChecked("Overlays")) { // With our hud resetting strategy, hudPoint3d should be valid here
@@ -310,6 +308,17 @@ function hudReticleDistance() { // 3d distance from camera to the reticle positi
     var reticlePositionOnHUD = HMD.worldPointFromOverlay(Reticle.position);
     return Vec3.distance(reticlePositionOnHUD, HMD.position);
 }
+
+function maybeAdjustReticleDepth() {
+    if (HMD.active) { // set depth
+        if (isPointingAtOverlay()) {
+            Reticle.depth = hudReticleDistance();
+        }
+    }
+}
+var ADJUST_RETICLE_DEPTH_INTERVAL = 50; // 20hz
+Script.setInterval(maybeAdjustReticleDepth,ADJUST_RETICLE_DEPTH_INTERVAL);
+
 function onMouseMove() {
     // Display cursor at correct depth (as in depthReticle.js), and updateMouseActivity.
     if (ignoreMouseActivity()) {
@@ -365,7 +374,7 @@ function makeToggleAction(hand) { // return a function(0|1) that makes the speci
     };
 }
 
-var clickMapping = Controller.newMapping(Script.resolvePath('') + '-click');
+var clickMapping = Controller.newMapping('handControllerPointer-click');
 Script.scriptEnding.connect(clickMapping.disable);
 
 // Gather the trigger data for smoothing.
@@ -440,7 +449,7 @@ function clearSystemLaser() {
     HMD.disableHandLasers(BOTH_HUD_LASERS);
     systemLaserOn = false;
     weMovedReticle = true;
-    Reticle.position = { x: -1, y: -1 }; 
+    Reticle.position = { x: -1, y: -1 };
 }
 function setColoredLaser() { // answer trigger state if lasers supported, else falsey.
     var color = (activeTrigger.state === 'full') ? LASER_TRIGGER_COLOR_XYZW : LASER_SEARCH_COLOR_XYZW;
@@ -508,3 +517,5 @@ Script.scriptEnding.connect(function () {
     Script.clearInterval(settingsChecker);
     OffscreenFlags.navigationFocusDisabled = false;
 });
+
+}()); // END LOCAL_SCOPE

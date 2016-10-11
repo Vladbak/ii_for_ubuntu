@@ -20,6 +20,8 @@ OriginalDesktop.Desktop {
         onEntered: ApplicationCompositor.reticleOverDesktop = true
         onExited: ApplicationCompositor.reticleOverDesktop = false
         acceptedButtons: Qt.NoButton
+		
+
     }
 
     // The tool window, one instance
@@ -44,8 +46,20 @@ OriginalDesktop.Desktop {
         }
     }
 
-    property var toolbars: ({})
     Component { id: toolbarBuilder; Toolbar { } }
+    // This used to create sysToolbar dynamically with a call to getToolbar() within onCompleted.
+    // Beginning with QT 5.6, this stopped working, as anything added to toolbars too early got
+    // wiped during startup.
+    Toolbar {
+        id: sysToolbar;
+        objectName: "com.highfidelity.interface.toolbar.system";
+        // Magic: sysToolbar.x and y come from settings, and are bound before the properties specified here are applied.
+        x: sysToolbar.x;
+        y: sysToolbar.y;
+    }
+    property var toolbars: (function (map) { // answer dictionary preloaded with sysToolbar
+        map[sysToolbar.objectName] = sysToolbar;
+        return map; })({});
 
     Component.onCompleted: {
         WebEngine.settings.javascriptCanOpenWindows = true;
@@ -53,7 +67,6 @@ OriginalDesktop.Desktop {
         WebEngine.settings.spatialNavigationEnabled = false;
         WebEngine.settings.localContentCanAccessRemoteUrls = true;
 
-        var sysToolbar = desktop.getToolbar("com.highfidelity.interface.toolbar.system");
         var toggleHudButton = sysToolbar.addButton({
             objectName: "hudToggle",
             imageURL: "../../../icons/hud.svg",
@@ -69,6 +82,39 @@ OriginalDesktop.Desktop {
             var overlayMenuItem = "Overlays"
             MenuInterface.setIsOptionChecked(overlayMenuItem, !MenuInterface.isOptionChecked(overlayMenuItem));
         });
+    }
+
+    // Accept a download through the webview
+    property bool webViewProfileSetup: false
+    property string currentUrl: ""
+    property string adaptedPath: ""
+    property string tempDir: ""
+
+    function initWebviewProfileHandlers(profile) {
+        console.log("The webview url in desktop is: " + currentUrl);
+        if (webViewProfileSetup) return;
+        webViewProfileSetup = true;
+
+        profile.downloadRequested.connect(function(download){
+            console.log("Download start: " + download.state);
+            adaptedPath = File.convertUrlToPath(currentUrl);
+            tempDir = File.getTempDir();
+            console.log("Temp dir created: " + tempDir);
+            download.path = tempDir + "/" + adaptedPath;
+            console.log("Path where object should download: " + download.path);
+            download.accept();
+            if (download.state === WebEngineDownloadItem.DownloadInterrupted) {
+                console.log("download failed to complete");
+            }
+        })
+
+        profile.downloadFinished.connect(function(download){
+            if (download.state === WebEngineDownloadItem.DownloadCompleted) {
+                File.runUnzip(download.path, currentUrl);
+            } else {
+                console.log("The download was corrupted, state: " + download.state);
+            }
+        })
     }
 
     // Create or fetch a toolbar with the given name

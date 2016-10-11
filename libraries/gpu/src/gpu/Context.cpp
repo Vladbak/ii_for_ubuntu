@@ -10,6 +10,7 @@
 //
 #include "Context.h"
 #include "Frame.h"
+#include "GPULogging.h"
 using namespace gpu;
 
 Context::CreateBackend Context::_createBackendCallback = nullptr;
@@ -18,15 +19,8 @@ std::once_flag Context::_initialized;
 
 Context::Context() {
     if (_createBackendCallback) {
-        _backend.reset(_createBackendCallback());
+        _backend = _createBackendCallback();
     }
-
-    _frameHandler = [this](Frame& frame){
-        for (size_t i = 0; i < frame.batches.size(); ++i) {
-            _backend->_stereo = frame.stereoStates[i];
-            _backend->render(frame.batches[i]);
-        }
-    };
 }
 
 Context::Context(const Context& context) {
@@ -35,42 +29,56 @@ Context::Context(const Context& context) {
 Context::~Context() {
 }
 
-void Context::setFrameHandler(FrameHandler handler) {
-    _frameHandler = handler;
-}
-
-#define DEFERRED_RENDERING
-
-void Context::beginFrame(const FramebufferPointer& outputFramebuffer, const glm::mat4& renderPose) {
-    _currentFrame = Frame();
-    _currentFrame.framebuffer = outputFramebuffer;
-    _currentFrame.pose = renderPose;
+void Context::beginFrame(const glm::mat4& renderPose) {
+    assert(!_frameActive);
     _frameActive = true;
+    _currentFrame = std::make_shared<Frame>();
+    _currentFrame->pose = renderPose;
 }
 
-void Context::append(Batch& batch) {
+void Context::appendFrameBatch(Batch& batch) {
     if (!_frameActive) {
         qWarning() << "Batch executed outside of frame boundaries";
+        return;
     }
-#ifdef DEFERRED_RENDERING
-    _currentFrame.batches.emplace_back(batch);
-    _currentFrame.stereoStates.emplace_back(_stereo);
-#else
-    _backend->_stereo = _stereo;
-    _backend->render(batch);
-#endif
+    _currentFrame->batches.push_back(batch);
 }
 
-void Context::endFrame() {
-#ifdef DEFERRED_RENDERING
-    if (_frameHandler) {
-        _frameHandler(_currentFrame);
-    }
-#endif
-    _currentFrame = Frame();
+FramePointer Context::endFrame() {
+    assert(_frameActive);
+    auto result = _currentFrame;
+    _currentFrame.reset();
     _frameActive = false;
+
+    result->stereoState = _stereo;
+    result->finish();
+    return result;
 }
 
+void Context::executeBatch(Batch& batch) const {
+    batch.flush();
+    _backend->render(batch);
+}
+
+void Context::recycle() const {
+    _backend->recycle();
+}
+
+void Context::consumeFrameUpdates(const FramePointer& frame) const {
+    frame->preRender();
+}
+
+void Context::executeFrame(const FramePointer& frame) const {
+    // FIXME? probably not necessary, but safe
+    consumeFrameUpdates(frame);
+    _backend->setStereoState(frame->stereoState);
+    {
+        // Execute the frame rendering commands
+        for (auto& batch : frame->batches) {
+            _backend->render(batch);
+        }
+    }
+}
 
 bool Context::makeProgram(Shader& shader, const Shader::BindingSet& bindings) {
     if (shader.isProgram() && _makeProgramCallback) {
@@ -111,15 +119,9 @@ void Context::getStereoViews(mat4* eyeViews) const {
     }
 }
 
-void Context::syncCache() {
-    PROFILE_RANGE(__FUNCTION__);
-    _backend->syncCache();
-}
-
 void Context::downloadFramebuffer(const FramebufferPointer& srcFramebuffer, const Vec4i& region, QImage& destImage) {
     _backend->downloadFramebuffer(srcFramebuffer, region, destImage);
 }
-
 
 void Context::getStats(ContextStats& stats) const {
     _backend->getStats(stats);
@@ -160,8 +162,9 @@ Backend::TransformCamera Backend::TransformCamera::getEyeCamera(int eye, const S
 }
 
 // Counters for Buffer and Texture usage in GPU/Context
-std::atomic<uint32_t> Context::_bufferGPUCount{ 0 };
-std::atomic<Buffer::Size> Context::_bufferGPUMemoryUsage{ 0 };
+std::atomic<uint32_t> Context::_fenceCount { 0 };
+std::atomic<uint32_t> Context::_bufferGPUCount { 0 };
+std::atomic<Buffer::Size> Context::_bufferGPUMemoryUsage { 0 };
 
 std::atomic<uint32_t> Context::_textureGPUCount{ 0 };
 std::atomic<Texture::Size> Context::_textureGPUMemoryUsage{ 0 };
@@ -169,10 +172,15 @@ std::atomic<Texture::Size> Context::_textureGPUVirtualMemoryUsage{ 0 };
 std::atomic<uint32_t> Context::_textureGPUTransferCount{ 0 };
 
 void Context::incrementBufferGPUCount() {
-    _bufferGPUCount++;
+    static std::atomic<uint32_t> max { 0 };
+    auto total = ++_bufferGPUCount;
+    if (total > max.load()) {
+        max = total;
+        qCDebug(gpulogging) << "New max GPU buffers " << total;
+    }
 }
 void Context::decrementBufferGPUCount() {
-    _bufferGPUCount--;
+    --_bufferGPUCount;
 }
 void Context::updateBufferGPUMemoryUsage(Size prevObjectSize, Size newObjectSize) {
     if (prevObjectSize == newObjectSize) {
@@ -185,12 +193,30 @@ void Context::updateBufferGPUMemoryUsage(Size prevObjectSize, Size newObjectSize
     }
 }
 
+void Context::incrementFenceCount() {
+    static std::atomic<uint32_t> max { 0 };
+    auto total = ++_fenceCount;
+    if (total > max.load()) {
+        max = total;
+        qCDebug(gpulogging) << "New max Fences " << total;
+    }
+}
+void Context::decrementFenceCount() {
+    --_fenceCount;
+}
+
 void Context::incrementTextureGPUCount() {
-    _textureGPUCount++;
+    static std::atomic<uint32_t> max { 0 };
+    auto total = ++_textureGPUCount;
+    if (total > max.load()) {
+        max = total;
+        qCDebug(gpulogging) << "New max GPU textures " << total;
+    }
 }
 void Context::decrementTextureGPUCount() {
-    _textureGPUCount--;
+    --_textureGPUCount;
 }
+
 void Context::updateTextureGPUMemoryUsage(Size prevObjectSize, Size newObjectSize) {
     if (prevObjectSize == newObjectSize) {
         return;
@@ -214,10 +240,15 @@ void Context::updateTextureGPUVirtualMemoryUsage(Size prevObjectSize, Size newOb
 }
 
 void Context::incrementTextureGPUTransferCount() {
-    _textureGPUTransferCount++;
+    static std::atomic<uint32_t> max { 0 };
+    auto total = ++_textureGPUTransferCount;
+    if (total > max.load()) {
+        max = total;
+        qCDebug(gpulogging) << "New max GPU textures transfers" << total;
+    }
 }
 void Context::decrementTextureGPUTransferCount() {
-    _textureGPUTransferCount--;
+    --_textureGPUTransferCount;
 }
 
 uint32_t Context::getBufferGPUCount() {

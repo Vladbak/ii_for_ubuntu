@@ -50,8 +50,8 @@ public:
 
     static int const EXIT_CODE_REBOOT;
 
-    bool handleHTTPRequest(HTTPConnection* connection, const QUrl& url, bool skipSubHandler = false);
-    bool handleHTTPSRequest(HTTPSConnection* connection, const QUrl& url, bool skipSubHandler = false);
+    bool handleHTTPRequest(HTTPConnection* connection, const QUrl& url, bool skipSubHandler = false) override;
+    bool handleHTTPSRequest(HTTPSConnection* connection, const QUrl& url, bool skipSubHandler = false) override;
 
 public slots:
     /// Called by NodeList to inform us a node has been added
@@ -105,6 +105,7 @@ signals:
 
 private:
     const QUuid& getID();
+    void parseCommandLine();
 
     void setupNodeListAndAssignments();
     bool optionallySetupOAuth();
@@ -205,6 +206,11 @@ private:
 
     friend class DomainGatekeeper;
     friend class DomainMetadata;
+
+    QString _iceServerAddr;
+    int _iceServerPort;
+    bool _overrideDomainID { false }; // should we override the domain-id from settings?
+    QUuid _overridingDomainID { QUuid() }; // what should we override it with?
 };
 
 

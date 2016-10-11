@@ -38,6 +38,7 @@ class AddressManager : public QObject, public Dependency {
     Q_PROPERTY(QString protocol READ getProtocol)
     Q_PROPERTY(QString hostname READ getHost)
     Q_PROPERTY(QString pathname READ currentPath)
+    Q_PROPERTY(QString placename READ getPlaceName)
 public:
     Q_INVOKABLE QString protocolVersion();
     using PositionGetter = std::function<glm::vec3()>;
@@ -57,8 +58,12 @@ public:
     bool isConnected();
     const QString& getProtocol() { return HIFI_URL_SCHEME; };
 
-    const QUrl currentAddress() const;
-    const QString currentPath(bool withOrientation = true) const;
+    QUrl currentAddress() const;
+    QUrl currentFacingAddress() const;
+    QUrl currentShareableAddress() const;
+    QUrl currentFacingShareableAddress() const;
+    QString currentPath(bool withOrientation = true) const;
+    QString currentFacingPath() const;
 
     const QUuid& getRootPlaceID() const { return _rootPlaceID; }
     const QString& getPlaceName() const { return _placeName; }
@@ -87,7 +92,7 @@ public slots:
 
     void goBack();
     void goForward();
-    void goToLocalSandbox(LookupTrigger trigger = LookupTrigger::StartupFromSettings) { handleUrl(SANDBOX_HIFI_ADDRESS, trigger); }
+    void goToLocalSandbox(QString path = "", LookupTrigger trigger = LookupTrigger::StartupFromSettings) { handleUrl(SANDBOX_HIFI_ADDRESS + path, trigger); }
     void goToEntry(LookupTrigger trigger = LookupTrigger::StartupFromSettings) { handleUrl(DEFAULT_HIFI_ADDRESS, trigger); }
 
     void goToUser(const QString& username);
@@ -98,6 +103,8 @@ public slots:
 
     void copyAddress();
     void copyPath();
+
+    void lookupShareableNameForDomainID(const QUuid& domainID);
 
 signals:
     void lookupResultsFinished();
@@ -121,6 +128,8 @@ protected:
 private slots:
     void handleAPIResponse(QNetworkReply& requestReply);
     void handleAPIError(QNetworkReply& errorReply);
+
+    void handleShareableNameAPIResponse(QNetworkReply& requestReply);
 
 private:
     void goToAddressFromObject(const QVariantMap& addressMap, const QNetworkReply& reply);
@@ -151,6 +160,8 @@ private:
     QUuid _rootPlaceID;
     PositionGetter _positionGetter;
     OrientationGetter _orientationGetter;
+
+    QString _shareablePlaceName;
 
     QStack<QUrl> _backStack;
     QStack<QUrl> _forwardStack;
