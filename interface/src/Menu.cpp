@@ -89,12 +89,14 @@ Menu::Menu() {
     QUndoStack* undoStack = qApp->getUndoStack();
     QAction* undoAction = undoStack->createUndoAction(editMenu);
     undoAction->setShortcut(Qt::CTRL | Qt::Key_Z);
-    addActionToQMenuAndActionHash(editMenu, undoAction, QString(), 0, QAction::NoRole, UNSPECIFIED_POSITION, QString(), ItemAccessRoles::Admin);
+    addActionToQMenuAndActionHash(editMenu, undoAction, QString(), 0, QAction::NoRole, UNSPECIFIED_POSITION, QString(),
+        ItemAccessRoles::Admin);
 
     // Edit > Redo
     QAction* redoAction = undoStack->createRedoAction(editMenu);
     redoAction->setShortcut(Qt::CTRL | Qt::SHIFT | Qt::Key_Z);
-    addActionToQMenuAndActionHash(editMenu, redoAction, QString(), 0, QAction::NoRole, UNSPECIFIED_POSITION, QString(), ItemAccessRoles::Admin);
+    addActionToQMenuAndActionHash(editMenu, redoAction, QString(), 0, QAction::NoRole, UNSPECIFIED_POSITION, QString(),
+        ItemAccessRoles::Admin);
 
     // Edit > Running Scripts
     addActionToQMenuAndActionHash(editMenu, MenuOption::RunningScripts, Qt::CTRL | Qt::Key_J,
