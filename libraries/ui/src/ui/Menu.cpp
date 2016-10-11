@@ -85,7 +85,7 @@ void Menu::scanMenu(QMenu& menu, settingsAction modifySetting, Settings& setting
 }
 
 void Menu::addDisabledActionAndSeparator(MenuWrapper* destinationMenu, const QString& actionName, 
-    int menuItemLocation, const QString& grouping, ItemAccessRoles accessRoles) {
+    int menuItemLocation, const QString& grouping, AccountAccess::Role accessRoles) {
     QAction* actionBefore = NULL;
     QAction* separator;
     QAction* separatorText;
@@ -108,21 +108,21 @@ void Menu::addDisabledActionAndSeparator(MenuWrapper* destinationMenu, const QSt
         separatorText->setEnabled(false);
     }
 
-    if ((accessRoles & RankAndFile) == RankAndFile) {
-        _accessRoleActions[RankAndFile] << separator;
-        _accessRoleActions[RankAndFile] << separatorText;
+    if ((accessRoles & AccountAccess::RankAndFile) == AccountAccess::RankAndFile) {
+        _accessRoleActions[AccountAccess::RankAndFile] << separator;
+        _accessRoleActions[AccountAccess::RankAndFile] << separatorText;
     }
-    if ((accessRoles & Trainers) == Trainers) {
-        _accessRoleActions[Trainers] << separator;
-        _accessRoleActions[Trainers] << separatorText;
+    if ((accessRoles & AccountAccess::Trainers) == AccountAccess::Trainers) {
+        _accessRoleActions[AccountAccess::Trainers] << separator;
+        _accessRoleActions[AccountAccess::Trainers] << separatorText;
     }
-    if ((accessRoles & THERankAndFile) == THERankAndFile) {
-        _accessRoleActions[THERankAndFile] << separator;
-        _accessRoleActions[THERankAndFile] << separatorText;
+    if ((accessRoles & AccountAccess::THERankAndFile) == AccountAccess::THERankAndFile) {
+        _accessRoleActions[AccountAccess::THERankAndFile] << separator;
+        _accessRoleActions[AccountAccess::THERankAndFile] << separatorText;
     }
-    if ((accessRoles & THETrainers) == THETrainers) {
-        _accessRoleActions[THETrainers] << separator;
-        _accessRoleActions[THETrainers] << separatorText;
+    if ((accessRoles & AccountAccess::THETrainers) == AccountAccess::THETrainers) {
+        _accessRoleActions[AccountAccess::THETrainers] << separator;
+        _accessRoleActions[AccountAccess::THETrainers] << separatorText;
     }
 
     if (isValidGrouping(grouping)) {
@@ -142,7 +142,7 @@ QAction* Menu::addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
                                              QAction::MenuRole role,
                                              int menuItemLocation, 
                                              const QString& grouping,
-                                             ItemAccessRoles accessRoles) {
+                                             AccountAccess::Role accessRoles) {
     QAction* action = NULL;
     QAction* actionBefore = NULL;
 
@@ -170,17 +170,17 @@ QAction* Menu::addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
 
     _actionHash.insert(actionName, action);
 
-    if ((accessRoles & RankAndFile) == RankAndFile) {
-        _accessRoleActions[RankAndFile] << action;
+    if ((accessRoles & AccountAccess::RankAndFile) == AccountAccess::RankAndFile) {
+        _accessRoleActions[AccountAccess::RankAndFile] << action;
     }
-    if ((accessRoles & Trainers) == Trainers) {
-        _accessRoleActions[Trainers] << action;
+    if ((accessRoles & AccountAccess::Trainers) == AccountAccess::Trainers) {
+        _accessRoleActions[AccountAccess::Trainers] << action;
     }
-    if ((accessRoles & THERankAndFile) == THERankAndFile) {
-        _accessRoleActions[THERankAndFile] << action;
+    if ((accessRoles & AccountAccess::THERankAndFile) == AccountAccess::THERankAndFile) {
+        _accessRoleActions[AccountAccess::THERankAndFile] << action;
     }
-    if ((accessRoles & THETrainers) == THETrainers) {
-        _accessRoleActions[THETrainers] << action;
+    if ((accessRoles & AccountAccess::THETrainers) == AccountAccess::THETrainers) {
+        _accessRoleActions[AccountAccess::THETrainers] << action;
     }
 
     if (isValidGrouping(grouping)) {
@@ -198,7 +198,7 @@ QAction* Menu::addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
                                              QAction::MenuRole role,
                                              int menuItemLocation, 
                                              const QString& grouping,
-                                             ItemAccessRoles accessRoles) {
+                                             AccountAccess::Role accessRoles) {
     QAction* actionBefore = NULL;
 
     if (menuItemLocation >= 0 && destinationMenu->actions().size() > menuItemLocation) {
@@ -225,17 +225,17 @@ QAction* Menu::addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
 
     _actionHash.insert(action->text(), action);
 
-    if ((accessRoles & RankAndFile) == RankAndFile) {
-        _accessRoleActions[RankAndFile] << action;
+    if ((accessRoles & AccountAccess::RankAndFile) == AccountAccess::RankAndFile) {
+        _accessRoleActions[AccountAccess::RankAndFile] << action;
     }
-    if ((accessRoles & Trainers) == Trainers) {
-        _accessRoleActions[Trainers] << action;
+    if ((accessRoles & AccountAccess::Trainers) == AccountAccess::Trainers) {
+        _accessRoleActions[AccountAccess::Trainers] << action;
     }
-    if ((accessRoles & THERankAndFile) == THERankAndFile) {
-        _accessRoleActions[THERankAndFile] << action;
+    if ((accessRoles & AccountAccess::THERankAndFile) == AccountAccess::THERankAndFile) {
+        _accessRoleActions[AccountAccess::THERankAndFile] << action;
     }
-    if ((accessRoles & THETrainers) == THETrainers) {
-        _accessRoleActions[THETrainers] << action;
+    if ((accessRoles & AccountAccess::THETrainers) == AccountAccess::THETrainers) {
+        _accessRoleActions[AccountAccess::THETrainers] << action;
     }
 
     if (isValidGrouping(grouping)) {
@@ -255,24 +255,24 @@ QAction* Menu::addCheckableActionToQMenuAndActionHash(MenuWrapper* destinationMe
                                                       const char* member,
                                                       int menuItemLocation, 
                                                       const QString& grouping,
-                                                      ItemAccessRoles accessRoles) {
+                                                      AccountAccess::Role accessRoles) {
 
     QAction* action = addActionToQMenuAndActionHash(destinationMenu, actionName, shortcut, receiver, member,
                                                         QAction::NoRole, menuItemLocation);
     action->setCheckable(true);
     action->setChecked(checked);
 
-    if ((accessRoles & RankAndFile) == RankAndFile) {
-        _accessRoleActions[RankAndFile] << action;
+    if ((accessRoles & AccountAccess::RankAndFile) == AccountAccess::RankAndFile) {
+        _accessRoleActions[AccountAccess::RankAndFile] << action;
     }
-    if ((accessRoles & Trainers) == Trainers) {
-        _accessRoleActions[Trainers] << action;
+    if ((accessRoles & AccountAccess::Trainers) == AccountAccess::Trainers) {
+        _accessRoleActions[AccountAccess::Trainers] << action;
     }
-    if ((accessRoles & THERankAndFile) == THERankAndFile) {
-        _accessRoleActions[THERankAndFile] << action;
+    if ((accessRoles & AccountAccess::THERankAndFile) == AccountAccess::THERankAndFile) {
+        _accessRoleActions[AccountAccess::THERankAndFile] << action;
     }
-    if ((accessRoles & THETrainers) == THETrainers) {
-        _accessRoleActions[THETrainers] << action;
+    if ((accessRoles & AccountAccess::THETrainers) == AccountAccess::THETrainers) {
+        _accessRoleActions[AccountAccess::THETrainers] << action;
     }
 
     if (isValidGrouping(grouping)) {
@@ -550,7 +550,7 @@ void Menu::setGroupingIsVisible(const QString& grouping, bool isVisible) {
     _groupingVisible[grouping] = isVisible;
 
     for (auto action: _groupingActions[grouping]) {
-        action->setVisible(isVisible && (_currentRole == ItemAccessRoles::Admin || _accessRoleActions[_currentRole].contains(action)/* || _accessRoleActions[ItemAccessRoles::All].contains(action)*/));
+        action->setVisible(isVisible && (_currentRole == AccountAccess::Admin || _accessRoleActions[_currentRole].contains(action)/* || _accessRoleActions[ItemAccessRoles::All].contains(action)*/));
         qDebug() << action->text();
     }
 
@@ -575,8 +575,8 @@ void Menu::removeActionGroup(const QString& groupName) {
     removeMenu(groupName);
 }
 
-bool Menu::getItemRoleIsVisible(ItemAccessRoles roles) {
-    if (roles == All  || _currentRole == Admin) {
+bool Menu::getItemRoleIsVisible(AccountAccess::Role roles) {
+    if (roles == AccountAccess::All || _currentRole == AccountAccess::Admin) {
         return true;
     }
     if ((roles & _currentRole) == _currentRole) {
@@ -655,4 +655,3 @@ void MenuWrapper::insertAction(QAction* before, QAction* action) {
         vrMenu->insertAction(before, action);
     });
 }
-

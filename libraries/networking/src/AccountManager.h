@@ -18,7 +18,7 @@
 #include <QtNetwork/QNetworkReply>
 #include <QUrlQuery>
 
-#include "NetworkAccessManager.h"
+//#include "NetworkAccessManager.h"
 
 #include "DataServerAccountInfo.h"
 #include "SharedUtil.h"
@@ -56,6 +56,8 @@ const QByteArray ACCESS_TOKEN_AUTHORIZATION_HEADER = "Authorization";
 using UserAgentGetter = std::function<QString()>;
 
 const auto DEFAULT_USER_AGENT_GETTER = []() -> QString { return HIGH_FIDELITY_USER_AGENT; };
+
+//class DataServerAccountInfo;
 
 class AccountManager : public QObject, public Dependency {
     Q_OBJECT
@@ -110,7 +112,7 @@ signals:
     void authRequired();
     void authEndpointChanged();
     void usernameChanged(const QString& username);
-    void roleChanged(const QString& role);
+    void roleChanged(AccountAccess::Role role);
     void profileChanged();
     void loginComplete(const QUrl& authURL);
     void loginFailed();

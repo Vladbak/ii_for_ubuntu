@@ -15,12 +15,13 @@
 #include <QtCore/QHash>
 #include <QtGui/QKeySequence>
 #include <QtWidgets/QMenuBar>
+#include <NetworkAccessManager.h>
 
 class Settings;
 namespace ui {
     class Menu;
 }
-
+/*
 enum ItemAccessRoles
 {
     RankAndFile = 1 << 0,
@@ -30,6 +31,7 @@ enum ItemAccessRoles
     Admin = 1 << 4,
     All = RankAndFile | Trainers | THERankAndFile | THETrainers | Admin
 };
+*/
 
 class MenuWrapper : public QObject {
 public:
@@ -82,7 +84,7 @@ public:
                                            QAction::MenuRole role = QAction::NoRole,
                                            int menuItemLocation = UNSPECIFIED_POSITION,
                                            const QString& grouping = QString(),
-                                           ItemAccessRoles accessRoles = ItemAccessRoles::All);
+                                           AccountAccess::Role accessRoles = AccountAccess::All);
 
     QAction* addActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
                                            QAction* action,
@@ -91,7 +93,7 @@ public:
                                            QAction::MenuRole role = QAction::NoRole,
                                            int menuItemLocation = UNSPECIFIED_POSITION,
                                            const QString& grouping = QString(),
-                                           ItemAccessRoles accessRoles = ItemAccessRoles::All);
+                                           AccountAccess::Role accessRoles = AccountAccess::All);
 
     QAction* addCheckableActionToQMenuAndActionHash(MenuWrapper* destinationMenu,
                                                     const QString& actionName,
@@ -101,7 +103,7 @@ public:
                                                     const char* member = NULL,
                                                     int menuItemLocation = UNSPECIFIED_POSITION,
                                                     const QString& grouping = QString(),
-                                                    ItemAccessRoles accessRoles = ItemAccessRoles::All);
+                                                    AccountAccess::Role accessRoles = AccountAccess::All);
 
     void removeAction(MenuWrapper* menu, const QString& actionName);
 
@@ -121,7 +123,7 @@ public slots:
 
     bool getGroupingIsVisible(const QString& grouping);
     void setGroupingIsVisible(const QString& grouping, bool isVisible); /// NOTE: the "" grouping is always visible
-    bool getItemRoleIsVisible(ItemAccessRoles roles);
+    bool getItemRoleIsVisible(AccountAccess::Role roles);
 
     void toggleDeveloperMenus();
     void toggleAdvancedMenus();
@@ -130,9 +132,10 @@ public slots:
 
     static bool isSomeSubmenuShown() { return _isSomeSubmenuShown; }
 
-    void roleChanged(const QString& role)
+    void roleChanged(AccountAccess::Role role)
     {
-        if (role == "Admin") {
+        _currentRole = role;
+       /* if (role == "Admin") {
             _currentRole = Admin;
         } else if (role == "RankAndFile") {
             _currentRole = RankAndFile;
@@ -142,7 +145,7 @@ public slots:
             _currentRole = THERankAndFile;
         } else if (role == "THETrainers") {
             _currentRole = THETrainers;
-        }
+        }*/
         // refresh display of items
         setGroupingIsVisible("", true);
         setGroupingIsVisible("Standard", true);
@@ -162,7 +165,7 @@ protected:
                                        const QString& actionName,
                                        int menuItemLocation = UNSPECIFIED_POSITION, 
                                        const QString& grouping = QString(),
-                                       ItemAccessRoles accessRoles = ItemAccessRoles::All);
+                                       AccountAccess::Role accessRoles = AccountAccess::All);
 
     QAction* getActionFromName(const QString& menuName, MenuWrapper* menu);
     MenuWrapper* getMenuParent(const QString& menuName, QString& finalMenuPart);
@@ -181,9 +184,9 @@ protected:
     static bool _isSomeSubmenuShown;
     friend class ::MenuWrapper;
 
-    QHash<ItemAccessRoles, QSet<QAction*>> _accessRoleActions;
+    QHash<AccountAccess::Role, QSet<QAction*>> _accessRoleActions;
 
-    ItemAccessRoles _currentRole { ItemAccessRoles::RankAndFile };
+    AccountAccess::Role _currentRole{ AccountAccess::RankAndFile };
 };
 
 } // namespace ui

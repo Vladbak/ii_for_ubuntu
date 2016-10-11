@@ -103,13 +103,13 @@ void Bookmarks::setupMenus(Menu* menubar, MenuWrapper* menu) {
     // Add menus/actions
     menubar->addActionToQMenuAndActionHash(menu, MenuOption::BookmarkLocation, 0,
                                            this, SLOT(bookmarkLocation()), QAction::NoRole, -1, QString(),
-                                           ItemAccessRoles::Admin);
+                                           AccountAccess::Admin);
     auto setHomeAction = menubar->addActionToQMenuAndActionHash(menu, MenuOption::SetHomeLocation);
     QObject::connect(setHomeAction, SIGNAL(triggered()), this, SLOT(setHomeLocation()), Qt::QueuedConnection);
     _bookmarksMenu = menu->addMenu(MenuOption::Bookmarks);
     _deleteBookmarksAction = menubar->addActionToQMenuAndActionHash(menu, MenuOption::DeleteBookmark, 0,
                                                                     this, SLOT(deleteBookmark()), QAction::NoRole, -1,
-                                                                    QString(), ItemAccessRoles::Admin);
+                                                                    QString(), AccountAccess::Admin);
     
     // Enable/Disable menus as needed
     enableMenuItems(_bookmarks.count() > 0);

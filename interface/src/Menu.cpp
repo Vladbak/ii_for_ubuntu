@@ -54,7 +54,7 @@ Menu* Menu::getInstance() {
 }
 
 Menu::Menu() {
-    _currentRole = ItemAccessRoles::Admin; // ItemAccessRoles::RankAndFile;
+    _currentRole = AccountAccess::Admin; // ItemAccessRoles::RankAndFile;
     auto dialogsManager = DependencyManager::get<DialogsManager>();
     auto accountManager = DependencyManager::get<AccountManager>();
 
@@ -92,13 +92,13 @@ Menu::Menu() {
     QAction* undoAction = undoStack->createUndoAction(editMenu);
     undoAction->setShortcut(Qt::CTRL | Qt::Key_Z);
     addActionToQMenuAndActionHash(editMenu, undoAction, QString(), 0, QAction::NoRole, UNSPECIFIED_POSITION, QString(),
-        ItemAccessRoles::Admin);
+        AccountAccess::Admin);
 
     // Edit > Redo
     QAction* redoAction = undoStack->createRedoAction(editMenu);
     redoAction->setShortcut(Qt::CTRL | Qt::SHIFT | Qt::Key_Z);
     addActionToQMenuAndActionHash(editMenu, redoAction, QString(), 0, QAction::NoRole, UNSPECIFIED_POSITION, QString(),
-        ItemAccessRoles::Admin);
+        AccountAccess::Admin);
 
     // Edit > Running Scripts
     addActionToQMenuAndActionHash(editMenu, MenuOption::RunningScripts, Qt::CTRL | Qt::Key_J,
@@ -107,18 +107,18 @@ Menu::Menu() {
     // Edit > Open and Run Script from File... [advanced]
     addActionToQMenuAndActionHash(editMenu, MenuOption::LoadScript, Qt::CTRL | Qt::Key_O,
         qApp, SLOT(loadDialog()),
-        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
+        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", AccountAccess::Admin);
 
     // Edit > Open and Run Script from Url... [advanced]
     addActionToQMenuAndActionHash(editMenu, MenuOption::LoadScriptURL,
         Qt::CTRL | Qt::SHIFT | Qt::Key_O, qApp, SLOT(loadScriptURLDialog()),
-                                  QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
+        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", AccountAccess::Admin);
 
     auto scriptEngines = DependencyManager::get<ScriptEngines>();
     // Edit > Stop All Scripts... [advanced]
     addActionToQMenuAndActionHash(editMenu, MenuOption::StopAllScripts, 0, 
         scriptEngines.data(), SLOT(stopAllScripts()),
-        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
+        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", AccountAccess::Admin);
 
     // Edit > Reload All Scripts... [advanced]
     addActionToQMenuAndActionHash(editMenu, MenuOption::ReloadAllScripts, Qt::CTRL | Qt::Key_R,
@@ -128,13 +128,13 @@ Menu::Menu() {
     // Edit > Scripts Editor... [advanced]
     addActionToQMenuAndActionHash(editMenu, MenuOption::ScriptEditor, Qt::ALT | Qt::Key_S,
         dialogsManager.data(), SLOT(showScriptEditor()),
-        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
+        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", AccountAccess::Admin);
 
     // Edit > Console... [advanced]
     addActionToQMenuAndActionHash(editMenu, MenuOption::Console, Qt::CTRL | Qt::ALT | Qt::Key_J,
         DependencyManager::get<StandAloneJSConsole>().data(),
         SLOT(toggleConsole()),
-        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
+        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", AccountAccess::Admin);
 
     editMenu->addSeparator();
 
@@ -149,11 +149,11 @@ Menu::Menu() {
     // Edit > Package Model... [advanced]
     addActionToQMenuAndActionHash(editMenu, MenuOption::PackageModel, 0,
         qApp, SLOT(packageModel()),
-        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
+        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", AccountAccess::Admin);
 
     // Edit > Reload All Content [advanced]
     addActionToQMenuAndActionHash(editMenu, MenuOption::ReloadContent, 0, qApp, SLOT(reloadResourceCaches()),
-        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", ItemAccessRoles::Admin);
+        QAction::NoRole, UNSPECIFIED_POSITION, "Advanced", AccountAccess::Admin);
 
 
     // Audio menu ----------------------------------
@@ -189,7 +189,7 @@ Menu::Menu() {
         0, // QML Qt::Key_Plus,
         avatar.get(),
         SLOT(increaseSize()), QAction::NoRole, UNSPECIFIED_POSITION, QString(),
-        ItemAccessRoles::Admin);
+        AccountAccess::Admin);
 
     // Avatar > Size > Decrease
     addActionToQMenuAndActionHash(avatarSizeMenu,
@@ -197,7 +197,7 @@ Menu::Menu() {
         0, // QML Qt::Key_Minus,
         avatar.get(),
         SLOT(decreaseSize()), QAction::NoRole, UNSPECIFIED_POSITION, QString(),
-        ItemAccessRoles::Admin);
+        AccountAccess::Admin);
 
     // Avatar > Size > Reset
     addActionToQMenuAndActionHash(avatarSizeMenu,
@@ -205,7 +205,7 @@ Menu::Menu() {
         0, // QML Qt::Key_Equal,
         avatar.get(),
         SLOT(resetSize()), QAction::NoRole, UNSPECIFIED_POSITION, QString(),
-        ItemAccessRoles::Admin);
+        AccountAccess::Admin);
 
     // Avatar > Reset Sensors
     addActionToQMenuAndActionHash(avatarMenu,
@@ -244,7 +244,7 @@ Menu::Menu() {
     // View > Mirror
     cameraModeGroup->addAction(addCheckableActionToQMenuAndActionHash(viewMenu,
         MenuOption::FullscreenMirror, 0, // QML Qt::Key_H,
-        false, qApp, SLOT(cameraMenuChanged()), UNSPECIFIED_POSITION, QString(), ItemAccessRoles::Admin));
+        false, qApp, SLOT(cameraMenuChanged()), UNSPECIFIED_POSITION, QString(), AccountAccess::Admin));
 
     // View > Independent [advanced]
     cameraModeGroup->addAction(addCheckableActionToQMenuAndActionHash(viewMenu,

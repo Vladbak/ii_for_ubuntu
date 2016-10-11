@@ -16,6 +16,19 @@
 #include <QtNetwork/QNetworkRequest>
 #include <QtQml/QQmlNetworkAccessManagerFactory>
 
+namespace AccountAccess {
+    enum Role : int
+    {
+        RankAndFile = 1 << 0,
+        Trainers = 1 << 1,
+        THERankAndFile = 1 << 2,
+        THETrainers = 1 << 3,
+        Admin = 1 << 4,
+        All = RankAndFile | Trainers | THERankAndFile | THETrainers | Admin
+    };
+}
+Q_DECLARE_METATYPE(AccountAccess::Role);
+
 /// Wrapper around QNetworkAccessManager to restrict at one instance by thread
 class NetworkAccessManager : public QNetworkAccessManager {
     Q_OBJECT

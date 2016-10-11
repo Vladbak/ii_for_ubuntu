@@ -2378,6 +2378,14 @@ void Application::keyPressEvent(QKeyEvent* event) {
                         }
                     }
                 }
+                if (isShifted) {
+                    unsigned int index = static_cast<unsigned int>(event->key() - Qt::Key_1);
+                    int enumValue = 1 << index;// < ItemAccessRoles::All >> index;
+                    auto menu = Menu::getInstance();
+                    if (index < 5) {
+                        Menu::getInstance()->roleChanged((AccountAccess::Role)enumValue);
+                    }
+                }
                 break;
 
             case Qt::Key_X:

@@ -20,6 +20,7 @@
 
 #include "NetworkLogging.h"
 #include "DataServerAccountInfo.h"
+#include "AccountManager.h"
 
 #ifdef __clang__
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -31,8 +32,9 @@ DataServerAccountInfo::DataServerAccountInfo(const DataServerAccountInfo& otherI
     _accessToken = otherInfo._accessToken;
     _username = otherInfo._username;
     _xmppPassword = otherInfo._xmppPassword;
-    _discourseApiKey = otherInfo._discourseApiKey;
-    _walletID = otherInfo._walletID;
+//    _discourseApiKey = otherInfo._discourseApiKey;
+//    _walletID = otherInfo._walletID;
+    _role = otherInfo._role;
     _privateKey = otherInfo._privateKey;
     _domainID = otherInfo._domainID;
     _temporaryDomainID = otherInfo._temporaryDomainID;
@@ -51,8 +53,9 @@ void DataServerAccountInfo::swap(DataServerAccountInfo& otherInfo) {
     swap(_accessToken, otherInfo._accessToken);
     swap(_username, otherInfo._username);
     swap(_xmppPassword, otherInfo._xmppPassword);
-    swap(_discourseApiKey, otherInfo._discourseApiKey);
-    swap(_walletID, otherInfo._walletID);
+//    swap(_discourseApiKey, otherInfo._discourseApiKey);
+//    swap(_walletID, otherInfo._walletID);
+    swap(_role, otherInfo._role);
     swap(_privateKey, otherInfo._privateKey);
     swap(_domainID, otherInfo._domainID);
     swap(_temporaryDomainID, otherInfo._temporaryDomainID);
@@ -71,7 +74,7 @@ void DataServerAccountInfo::setUsername(const QString& username) {
     }
 }
 
-void DataServerAccountInfo::setRole(const QString& role) {
+void DataServerAccountInfo::setRole(AccountAccess::Role role) {
     if (_role != role) {
         _role = role;
 
@@ -85,6 +88,7 @@ void DataServerAccountInfo::setXMPPPassword(const QString& xmppPassword) {
      }
 }
 
+/*
 void DataServerAccountInfo::setDiscourseApiKey(const QString& discourseApiKey) {
     if (_discourseApiKey != discourseApiKey) {
         _discourseApiKey = discourseApiKey;
@@ -96,6 +100,7 @@ void DataServerAccountInfo::setWalletID(const QUuid& walletID) {
         _walletID = walletID;
     }
 }
+*/
 
 bool DataServerAccountInfo::hasProfile() const {
     return _username.length() > 0;
@@ -104,7 +109,22 @@ bool DataServerAccountInfo::hasProfile() const {
 void DataServerAccountInfo::setProfileInfoFromJSON(const QJsonObject& jsonObject) {
     QJsonObject user = jsonObject["data"].toObject()["user"].toObject();
     setUsername(user["username"].toString());
-    setRole(user["role"].toString());
+    QString role = user["role"].toString();
+    if (role == "Admin") {
+        setRole(AccountAccess::Admin);
+    }
+    else if (role == "RankAndFile") {
+        setRole(AccountAccess::RankAndFile);
+    }
+    else if (role == "Trainers") {
+        setRole(AccountAccess::Trainers);
+    }
+    else if (role == "THERankAndFile") {
+        setRole(AccountAccess::THERankAndFile);
+    }
+    else if (role == "THETrainers") {
+        setRole(AccountAccess::THETrainers);
+    }
     //UTII We dont need this:
     //setXMPPPassword(user["xmpp_password"].toString());
     //setDiscourseApiKey(user["discourse_api_key"].toString());
@@ -160,15 +180,18 @@ QByteArray DataServerAccountInfo::signPlaintext(const QByteArray& plaintext) {
 }
 
 QDataStream& operator<<(QDataStream &out, const DataServerAccountInfo& info) {
-    out << info._accessToken << info._username << info._xmppPassword << info._discourseApiKey
-        << info._walletID << info._privateKey << info._domainID
+    quint8 role = info._role;
+    out << info._accessToken << info._username << info._xmppPassword << role /*<< info._discourseApiKey
+        << info._walletID*/ << info._privateKey << info._domainID
         << info._temporaryDomainID << info._temporaryDomainApiKey;
     return out;
 }
 
 QDataStream& operator>>(QDataStream &in, DataServerAccountInfo& info) {
-    in >> info._accessToken >> info._username >> info._xmppPassword >> info._discourseApiKey
-        >> info._walletID >> info._privateKey >> info._domainID
+    qint8 role;
+    in >> info._accessToken >> info._username >> info._xmppPassword >> role /* (quint32)info._role /*>> info._discourseApiKey
+        >> info._walletID*/ >> info._privateKey >> info._domainID
         >> info._temporaryDomainID >> info._temporaryDomainApiKey;
+    info._role = ((AccountAccess::Role) role);
     return in;
 }
