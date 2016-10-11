@@ -18,6 +18,8 @@
 
 #include "AudioIOStats.h"
 
+static const bool SEND_AUDIO_STATS = false;
+
 // This is called 5x/sec (see AudioStatsDialog), and we want it to log the last 5s
 static const int INPUT_READS_WINDOW = 25;
 static const int INPUT_UNPLAYED_WINDOW = 25;

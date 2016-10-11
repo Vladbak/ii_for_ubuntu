@@ -54,7 +54,7 @@ Menu* Menu::getInstance() {
 }
 
 Menu::Menu() {
-    _currentRole = ItemAccessRoles::RankAndFile;
+    _currentRole = ItemAccessRoles::Admin; // ItemAccessRoles::RankAndFile;
     auto dialogsManager = DependencyManager::get<DialogsManager>();
     auto accountManager = DependencyManager::get<AccountManager>();
 

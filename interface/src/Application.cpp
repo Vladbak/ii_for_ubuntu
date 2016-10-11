@@ -5597,6 +5597,7 @@ void Application::updateDisplayMode() {
         foreach(auto displayPlugin, standard) {
             addDisplayPluginToMenu(displayPlugin, first);
             auto displayPluginName = displayPlugin->getName();
+            qDebug() << "Adding display plugin" << displayPluginName;
             QObject::connect(displayPlugin.get(), &DisplayPlugin::recommendedFramebufferSizeChanged, [this](const QSize & size) {
                 resizeGL();
             });

@@ -39,7 +39,7 @@ ModalWindow {
         Loader {
             id: bodyLoader
             anchors.fill: parent
-            source: loginDialog.isSteamRunning() ? "LoginDialog/SignInBody.qml" : "LoginDialog/LinkAccountBody.qml"
+            source: "LoginDialog/UtiiBody.qml"
         }
     }
 

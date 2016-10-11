@@ -546,10 +546,12 @@ void Menu::setGroupingIsVisible(const QString& grouping, bool isVisible) {
     //if (grouping.isEmpty() || grouping.isNull()) {
     //    return;
     //}
+    qDebug() << "Group:" << grouping << "Visible:" << isVisible;
     _groupingVisible[grouping] = isVisible;
 
     for (auto action: _groupingActions[grouping]) {
-        action->setVisible(isVisible && (_currentRole == ItemAccessRoles::Admin || _accessRoleActions[_currentRole].contains(action)));
+        action->setVisible(isVisible && (_currentRole == ItemAccessRoles::Admin || _accessRoleActions[_currentRole].contains(action)/* || _accessRoleActions[ItemAccessRoles::All].contains(action)*/));
+        qDebug() << action->text();
     }
 
     QMenuBar::repaint();
@@ -574,7 +576,7 @@ void Menu::removeActionGroup(const QString& groupName) {
 }
 
 bool Menu::getItemRoleIsVisible(ItemAccessRoles roles) {
-    if (_currentRole == Admin) {
+    if (roles == All  || _currentRole == Admin) {
         return true;
     }
     if ((roles & _currentRole) == _currentRole) {
