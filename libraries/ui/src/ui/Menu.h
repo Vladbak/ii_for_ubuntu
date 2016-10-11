@@ -145,6 +145,7 @@ public slots:
         }
         // refresh display of items
         setGroupingIsVisible("", true);
+        setGroupingIsVisible("Standard", true);
         setGroupingIsVisible("Advanced", getGroupingIsVisible("Advanced"));
         setGroupingIsVisible("Developer", getGroupingIsVisible("Developer"));
     }

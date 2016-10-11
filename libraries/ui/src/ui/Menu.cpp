@@ -532,7 +532,7 @@ bool Menu::menuItemExists(const QString& menu, const QString& menuitem) {
 }
 
 bool Menu::getGroupingIsVisible(const QString& grouping) {
-    if (grouping.isEmpty() || grouping.isNull()) {
+    if (grouping.isEmpty() || grouping.isNull() || grouping == "Standard") {
         return true;
     }
     if (_groupingVisible.contains(grouping)) {
