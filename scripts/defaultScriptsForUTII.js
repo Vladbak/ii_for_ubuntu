@@ -94,7 +94,6 @@ if (Menu.isOptionChecked(MENU_ITEM)) {
 
 function menuItemEvent(menuItem) {
     if (menuItem == MENU_ITEM) {
-
         isChecked = Menu.isOptionChecked(MENU_ITEM);
         if (isChecked === true) {
             Settings.setValue(SETTINGS_KEY, true);
