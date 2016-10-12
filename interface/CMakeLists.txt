@@ -160,8 +160,8 @@ set_target_properties(
 target_include_directories(${TARGET_NAME} PRIVATE "${CMAKE_BINARY_DIR}/includes")
 
 if (WIN32)
-#  # These are external plugins, but we need to do the 'add dependency' here so that their
-#  # binary directories get added to the fixup path
+  # These are external plugins, but we need to do the 'add dependency' here so that their
+  # binary directories get added to the fixup path
   add_dependency_external_projects(sixense)
   add_dependency_external_projects(sdl2)
   add_dependency_external_projects(OpenVR)
@@ -183,9 +183,9 @@ endif ()
 # link required hifi libraries
 link_hifi_libraries(
   shared octree gpu gl gpu-gl procedural model render
-                    recording fbx networking model-networking entities avatars
-                    audio audio-client animation script-engine physics
-                    render-utils entities-renderer ui auto-updater
+  recording fbx networking model-networking entities avatars
+  audio audio-client animation script-engine physics
+  render-utils entities-renderer ui auto-updater
   controllers plugins
   ui-plugins display-plugins input-plugins
   ${NON_ANDROID_LIBRARIES}
