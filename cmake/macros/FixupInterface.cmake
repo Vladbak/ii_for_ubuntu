@@ -15,9 +15,11 @@ macro(fixup_interface)
     string(REPLACE " " "\\ " ESCAPED_BUNDLE_NAME ${INTERFACE_BUNDLE_NAME})
     string(REPLACE " " "\\ " ESCAPED_INSTALL_PATH ${INTERFACE_INSTALL_DIR})
     set(_INTERFACE_INSTALL_PATH "${ESCAPED_INSTALL_PATH}/${ESCAPED_BUNDLE_NAME}.app")
-
+    message("Fixup Interface")
+    message("ESCAPED_BUNDLE_NAME:" ESCAPED_BUNDLE_NAME)
+    message("ESCAPED_INSTALL_PATH:" ESCAPED_BUNDLE_NAME)
     find_program(MACDEPLOYQT_COMMAND macdeployqt PATHS "${QT_DIR}/bin" NO_DEFAULT_PATH)
-
+    message("MACDEPLOYQT_COMMAND:" MACDEPLOYQT_COMMAND)
     if (NOT MACDEPLOYQT_COMMAND AND (PRODUCTION_BUILD OR PR_BUILD))
       message(FATAL_ERROR "Could not find macdeployqt at ${QT_DIR}/bin.\
         It is required to produce an relocatable interface application.\
@@ -32,6 +34,10 @@ macro(fixup_interface)
       )"
       COMPONENT ${CLIENT_COMPONENT}
     )
+    message("CODE:" "execute_process(COMMAND ${MACDEPLOYQT_COMMAND}\
+        \${CMAKE_INSTALL_PREFIX}/${_INTERFACE_INSTALL_PATH}/\
+        -verbose=2 -qmldir=${CMAKE_SOURCE_DIR}/interface/resources/qml/\
+      )")
 
   endif ()
 endmacro()

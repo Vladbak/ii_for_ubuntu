@@ -154,7 +154,7 @@ endif()
 set_target_properties(
     ${TARGET_NAME}
     PROPERTIES 
-      OUTPUT_NAME ${APP_NAME}
+      OUTPUT_NAME "${APP_NAME}"
 )
 
 target_include_directories(${TARGET_NAME} PRIVATE "${CMAKE_BINARY_DIR}/includes")
@@ -275,6 +275,10 @@ if (APPLE)
   )
 
   set(SCRIPTS_INSTALL_DIR "${INTERFACE_INSTALL_APP_PATH}/Contents/Resources")
+  message("Extra OSX Bundle Debug info:")
+  message("Install app path:" ${INTERFACE_INSTALL_APP_PATH})
+  message("SCRIPTS_INSTALL_DIR:" ${SCRIPTS_INSTALL_DIR})
+  message("TARGET_NAME:" ${TARGET_NAME})
 
   # copy script files beside the executable
   add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
