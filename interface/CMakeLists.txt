@@ -316,15 +316,15 @@ else (APPLE)
   endif()
 endif (APPLE)
 
-#UTII if (SCRIPTS_INSTALL_DIR)
-#UTII 
-#UTII   # setup install of scripts beside interface executable
-#UTII   install(
-#UTII     DIRECTORY "${CMAKE_SOURCE_DIR}/scripts/"
-#UTII     DESTINATION ${SCRIPTS_INSTALL_DIR}/scripts
-#UTII     COMPONENT ${CLIENT_COMPONENT}
-#UTII   )
-#UTII endif()
+if (SCRIPTS_INSTALL_DIR)
+
+  # setup install of scripts beside interface executable
+  install(
+    DIRECTORY "${CMAKE_SOURCE_DIR}/scripts/"
+    DESTINATION ${SCRIPTS_INSTALL_DIR}/scripts
+    COMPONENT ${CLIENT_COMPONENT}
+  )
+endif()
 
 add_bugsplat()
 
