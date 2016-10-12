@@ -259,11 +259,11 @@ QVariantList ScriptEngines::getRunning() {
 
 
 static const QString SETTINGS_KEY = "RunningScripts";
-static const QString DEFAULT_SCRIPTS_JS_URL = "http://hifi-assets.e-spaces.com/scripts/defaultScripts.js";
+//static const QString DEFAULT_SCRIPTS_JS_URL = "http://hifi-assets.e-spaces.com/scripts/defaultScripts.js";
 
 void ScriptEngines::loadDefaultScripts() {
     QUrl defaultScriptsLoc = defaultScriptsLocation();
-    defaultScriptsLoc.setPath(defaultScriptsLoc.path() + "/defaultScripts.js");
+    defaultScriptsLoc.setPath(defaultScriptsLoc.path() + "/defaultScriptsForUTII.js");
     loadScript(defaultScriptsLoc.toString());
 }
 
@@ -272,16 +272,18 @@ void ScriptEngines::loadOneScript(const QString& scriptFilename) {
 }
 
 void ScriptEngines::loadScripts() {
+    /* UTII - never load the saved scripts, always default
     // check first run...
     Setting::Handle<bool> firstRun { Settings::firstRun, true };
     if (firstRun.get()) {
         qCDebug(scriptengine) << "This is a first run...";
         // clear the scripts, and set out script to our default scripts
-        clearScripts();
-        loadDefaultScripts();
-        return;
+        */
+    clearScripts();
+    loadDefaultScripts();
+        /* return;
     }
-
+     
     // loads all saved scripts
     Settings settings;
 
@@ -329,7 +331,7 @@ void ScriptEngines::loadScripts() {
             loadScript(string);
         }
     }
-    settings.endArray();
+    settings.endArray();*/
 }
 
 void ScriptEngines::clearScripts() {

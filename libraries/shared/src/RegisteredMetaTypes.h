@@ -21,6 +21,19 @@
 #include "AACube.h"
 #include "SharedUtil.h"
 
+namespace AccountAccess {
+    enum Role : int
+    {
+        RankAndFile = 1 << 0,
+        Trainers = 1 << 1,
+        THERankAndFile = 1 << 2,
+        THETrainers = 1 << 3,
+        Admin = 1 << 4,
+        All = RankAndFile | Trainers | THERankAndFile | THETrainers | Admin
+    };
+}
+Q_DECLARE_METATYPE(AccountAccess::Role);
+
 class QColor;
 class QUrl;
 
@@ -160,5 +173,8 @@ void quuidFromScriptValue(const QScriptValue& object, QUuid& uuid);
 //Q_DECLARE_METATYPE(QSizeF) // Don't need to to this becase it's arleady a meta type
 QScriptValue qSizeFToScriptValue(QScriptEngine* engine, const QSizeF& qSizeF);
 void qSizeFFromScriptValue(const QScriptValue& object, QSizeF& qSizeF);
+
+QScriptValue accountAccessRoleToScriptValue(QScriptEngine* engine, const AccountAccess::Role& role);
+void accountAccessRoleFromScriptValue(const QScriptValue& object, AccountAccess::Role& role);
 
 #endif // hifi_RegisteredMetaTypes_h

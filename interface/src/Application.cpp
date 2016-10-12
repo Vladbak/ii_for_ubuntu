@@ -2365,7 +2365,7 @@ void Application::keyPressEvent(QKeyEvent* event) {
             case Qt::Key_5:
             case Qt::Key_6:
             case Qt::Key_7:
-                if (isMeta || isOption) {
+                if (isMeta) {
                     unsigned int index = static_cast<unsigned int>(event->key() - Qt::Key_1);
                     auto displayPlugins = PluginManager::getInstance()->getDisplayPlugins();
                     if (index < displayPlugins.size()) {
@@ -2378,12 +2378,12 @@ void Application::keyPressEvent(QKeyEvent* event) {
                         }
                     }
                 }
-                if (isShifted) {
+                if (isOption) {
                     unsigned int index = static_cast<unsigned int>(event->key() - Qt::Key_1);
-                    int enumValue = 1 << index;// < ItemAccessRoles::All >> index;
+                    int enumValue = 1 << index;
                     auto menu = Menu::getInstance();
                     if (index < 5) {
-                        Menu::getInstance()->roleChanged((AccountAccess::Role)enumValue);
+                        menu->roleChanged((AccountAccess::Role)enumValue);
                     }
                 }
                 break;
@@ -5152,7 +5152,7 @@ bool Application::askToWearAvatarAttachmentUrl(const QString& url) {
     QNetworkAccessManager& networkAccessManager = NetworkAccessManager::getInstance();
     QNetworkRequest networkRequest = QNetworkRequest(url);
     networkRequest.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
-    networkRequest.setHeader(QNetworkRequest::UserAgentHeader, HIGH_FIDELITY_USER_AGENT);
+    networkRequest.setHeader(QNetworkRequest::UserAgentHeader, INFINITY_ISLAND_USER_AGENT);
     QNetworkReply* reply = networkAccessManager.get(networkRequest);
     int requestNumber = ++_avatarAttachmentRequest;
     connect(reply, &QNetworkReply::finished, [this, reply, url, requestNumber]() {

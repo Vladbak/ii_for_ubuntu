@@ -18,13 +18,16 @@ class AccountScriptingInterface : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(QString username READ getUsername NOTIFY usernameChanged)
+    Q_PROPERTY(AccountAccess::Role role READ getRole NOTIFY roleChanged)
 
 signals:
     void usernameChanged();
+    void roleChanged();
 
 public slots:
     static AccountScriptingInterface* getInstance();
     QString getUsername();
+    AccountAccess::Role getRole();
     bool isLoggedIn();
     bool checkAndSignalForAccessToken();
 };

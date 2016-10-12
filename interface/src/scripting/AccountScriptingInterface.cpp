@@ -18,6 +18,8 @@ AccountScriptingInterface* AccountScriptingInterface::getInstance() {
     auto accountManager = DependencyManager::get<AccountManager>();
     QObject::connect(accountManager.data(), &AccountManager::profileChanged,
                      &sharedInstance, &AccountScriptingInterface::usernameChanged);
+    QObject::connect(accountManager.data(), &AccountManager::profileChanged,
+                     &sharedInstance, &AccountScriptingInterface::roleChanged);
     return &sharedInstance;
 }
 
@@ -38,4 +40,12 @@ QString AccountScriptingInterface::getUsername() {
     } else {
         return "Unknown user";
     }
+}
+
+AccountAccess::Role AccountScriptingInterface::getRole() {
+    auto accountManager = DependencyManager::get<AccountManager>();
+    if (!accountManager->isLoggedIn()) {
+        return AccountAccess::RankAndFile;
+    }
+    return accountManager->getAccountInfo().getRole();
 }

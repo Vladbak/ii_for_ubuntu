@@ -18,8 +18,6 @@
 #include <QtNetwork/QNetworkReply>
 #include <QUrlQuery>
 
-//#include "NetworkAccessManager.h"
-
 #include "DataServerAccountInfo.h"
 #include "SharedUtil.h"
 
@@ -55,7 +53,7 @@ const QByteArray ACCESS_TOKEN_AUTHORIZATION_HEADER = "Authorization";
 
 using UserAgentGetter = std::function<QString()>;
 
-const auto DEFAULT_USER_AGENT_GETTER = []() -> QString { return HIGH_FIDELITY_USER_AGENT; };
+const auto DEFAULT_USER_AGENT_GETTER = []() -> QString { return INFINITY_ISLAND_USER_AGENT; };
 
 //class DataServerAccountInfo;
 

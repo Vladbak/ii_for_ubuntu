@@ -107,6 +107,8 @@ void AccountManager::logout() {
     emit logoutComplete();
     // the username has changed to blank
     emit usernameChanged(QString());
+
+    emit roleChanged(AccountAccess::RankAndFile);
 }
 
 QString accountFileDir() {

@@ -16,6 +16,7 @@
 #include <QtCore/QUuid>
 #include <QtNetwork/qnetworkreply.h>
 
+#include "RegisteredMetaTypes.h"
 #include "NetworkAccessManager.h"
 #include "OAuthAccessToken.h"
 

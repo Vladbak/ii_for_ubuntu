@@ -54,9 +54,10 @@ Menu* Menu::getInstance() {
 }
 
 Menu::Menu() {
-    _currentRole = AccountAccess::Admin; // ItemAccessRoles::RankAndFile;
-    auto dialogsManager = DependencyManager::get<DialogsManager>();
     auto accountManager = DependencyManager::get<AccountManager>();
+    _currentRole = accountManager->getAccountInfo().getRole();
+
+    auto dialogsManager = DependencyManager::get<DialogsManager>();
 
     // File/Application menu ----------------------------------
     MenuWrapper* fileMenu = addMenu("File");

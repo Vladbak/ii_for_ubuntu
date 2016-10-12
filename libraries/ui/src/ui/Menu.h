@@ -15,23 +15,14 @@
 #include <QtCore/QHash>
 #include <QtGui/QKeySequence>
 #include <QtWidgets/QMenuBar>
-#include <NetworkAccessManager.h>
+#include "RegisteredMetaTypes.h"
+#include <DependencyManager.h>
+#include "ScriptEngines.h"
 
 class Settings;
 namespace ui {
     class Menu;
 }
-/*
-enum ItemAccessRoles
-{
-    RankAndFile = 1 << 0,
-    Trainers = 1 << 1,
-    THERankAndFile = 1 << 2,
-    THETrainers = 1 << 3,
-    Admin = 1 << 4,
-    All = RankAndFile | Trainers | THERankAndFile | THETrainers | Admin
-};
-*/
 
 class MenuWrapper : public QObject {
 public:
@@ -135,17 +126,29 @@ public slots:
     void roleChanged(AccountAccess::Role role)
     {
         _currentRole = role;
-       /* if (role == "Admin") {
-            _currentRole = Admin;
-        } else if (role == "RankAndFile") {
-            _currentRole = RankAndFile;
-        } else if (role == "Trainers") {
-            _currentRole = Trainers;
-        } else if (role == "THERankAndFile") {
-            _currentRole = THERankAndFile;
-        } else if (role == "THETrainers") {
-            _currentRole = THETrainers;
-        }*/
+        QString roleString = "Unknown";
+        switch (role) {
+            case AccountAccess::Admin:
+                roleString = "Admin";
+                break;
+            case AccountAccess::RankAndFile:
+                roleString = "RankAndFile";
+                break;
+            case AccountAccess::THERankAndFile:
+                roleString = "THERankAndFile";
+                break;
+            case AccountAccess::THETrainers:
+                roleString = "THETrainers";
+                break;
+            case AccountAccess::Trainers:
+                roleString = "Trainers";
+                break;
+        }
+        qDebug() << "Role changed to" << roleString;
+        auto scriptEngines = DependencyManager::get<ScriptEngines>();
+        scriptEngines->stopAllScripts();
+        scriptEngines->loadDefaultScripts();
+
         // refresh display of items
         setGroupingIsVisible("", true);
         setGroupingIsVisible("Standard", true);
@@ -186,7 +189,7 @@ protected:
 
     QHash<AccountAccess::Role, QSet<QAction*>> _accessRoleActions;
 
-    AccountAccess::Role _currentRole{ AccountAccess::RankAndFile };
+    AccountAccess::Role _currentRole;
 };
 
 } // namespace ui

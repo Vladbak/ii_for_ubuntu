@@ -77,7 +77,7 @@ void XMLHttpRequestClass::abort() {
 }
 
 void XMLHttpRequestClass::setRequestHeader(const QString& name, const QString& value) {
-    _request.setHeader(QNetworkRequest::UserAgentHeader, HIGH_FIDELITY_USER_AGENT);
+    _request.setHeader(QNetworkRequest::UserAgentHeader, INFINITY_ISLAND_USER_AGENT);
     _request.setRawHeader(QByteArray(name.toLatin1()), QByteArray(value.toLatin1()));
 }
 

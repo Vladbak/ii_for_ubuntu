@@ -54,6 +54,7 @@ void registerMetaTypes(QScriptEngine* engine) {
     qScriptRegisterMetaType(engine, quuidToScriptValue, quuidFromScriptValue);
     qScriptRegisterMetaType(engine, qSizeFToScriptValue, qSizeFFromScriptValue);
     qScriptRegisterMetaType(engine, aaCubeToScriptValue, aaCubeFromScriptValue);
+    qScriptRegisterMetaType(engine, accountAccessRoleToScriptValue, accountAccessRoleFromScriptValue);
 }
 
 QScriptValue mat4toScriptValue(QScriptEngine* engine, const glm::mat4& mat4) {
@@ -754,4 +755,13 @@ QScriptValue qSizeFToScriptValue(QScriptEngine* engine, const QSizeF& qSizeF) {
 void qSizeFFromScriptValue(const QScriptValue& object, QSizeF& qSizeF) {
     qSizeF.setWidth(object.property("width").toVariant().toFloat());
     qSizeF.setHeight(object.property("height").toVariant().toFloat());
+}
+
+QScriptValue accountAccessRoleToScriptValue(QScriptEngine* engine, const AccountAccess::Role& role) {
+    QScriptValue obj(role);
+    return obj;
+}
+
+void accountAccessRoleFromScriptValue(const QScriptValue& object, AccountAccess::Role& role) {
+    role = (AccountAccess::Role)((int)object.toInteger());
 }
