@@ -1025,6 +1025,13 @@ Application::Application(int& argc, char** argv, QElapsedTimer& startupTimer) :
     scriptEngines->setScriptsLocation(scriptEngines->getScriptsLocation());
     // do this as late as possible so that all required subsystems are initialized
     scriptEngines->loadScripts();
+    // UTII: make sure the scripts reset whenever the profile changes, this prevents the user from seeing the menu items for
+    // another role:
+    connect(accountManager.data(), &AccountManager::profileChanged, this, []{
+        auto scriptEngines = DependencyManager::get<ScriptEngines>();
+        scriptEngines->stopAllScripts();
+        scriptEngines->loadDefaultScripts();
+    }, Qt::QueuedConnection);
     // Make sure we don't time out during slow operations at startup
     updateHeartbeat();
 

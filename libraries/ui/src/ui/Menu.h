@@ -17,7 +17,6 @@
 #include <QtWidgets/QMenuBar>
 #include "RegisteredMetaTypes.h"
 #include <DependencyManager.h>
-#include "ScriptEngines.h"
 
 class Settings;
 namespace ui {
@@ -145,9 +144,7 @@ public slots:
                 break;
         }
         qDebug() << "Role changed to" << roleString;
-        auto scriptEngines = DependencyManager::get<ScriptEngines>();
-        scriptEngines->stopAllScripts();
-        scriptEngines->loadDefaultScripts();
+
 
         // refresh display of items
         setGroupingIsVisible("", true);
