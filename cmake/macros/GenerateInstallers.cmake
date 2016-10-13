@@ -64,18 +64,18 @@ macro(GENERATE_INSTALLERS)
     set(CPACK_OSX_PACKAGE_VERSION ${CMAKE_OSX_DEPLOYMENT_TARGET})
 
     # make sure a High Fidelity directory exists, in case this hits prior to other installs
-    install(CODE "file(MAKE_DIRECTORY \"\${CMAKE_INSTALL_PREFIX}/${DMG_SUBFOLDER_NAME}\")")
+#UTII    install(CODE "file(MAKE_DIRECTORY \"\${CMAKE_INSTALL_PREFIX}/${DMG_SUBFOLDER_NAME}\")")
 
     # add the resource file to the Icon file inside the folder
-    install(CODE
-      "execute_process(COMMAND Rez -append ${DMG_SUBFOLDER_ICON} -o \${CMAKE_INSTALL_PREFIX}/${ESCAPED_DMG_SUBFOLDER_NAME}/Icon\\r)"
-    )
+#UTII    install(CODE
+#UTII      "execute_process(COMMAND Rez -append ${DMG_SUBFOLDER_ICON} -o \${CMAKE_INSTALL_PREFIX}/${ESCAPED_DMG_SUBFOLDER_NAME}/Icon\\r)"
+#UTII    )
 
     # modify the folder to use that custom icon
-    install(CODE "execute_process(COMMAND SetFile -a C \${CMAKE_INSTALL_PREFIX}/${ESCAPED_DMG_SUBFOLDER_NAME})")
+#UTII    install(CODE "execute_process(COMMAND SetFile -a C \${CMAKE_INSTALL_PREFIX}/${ESCAPED_DMG_SUBFOLDER_NAME})")
 
     # hide the special Icon? file
-    install(CODE "execute_process(COMMAND SetFile -a V \${CMAKE_INSTALL_PREFIX}/${ESCAPED_DMG_SUBFOLDER_NAME}/Icon\\r)")
+#UTII    install(CODE "execute_process(COMMAND SetFile -a V \${CMAKE_INSTALL_PREFIX}/${ESCAPED_DMG_SUBFOLDER_NAME}/Icon\\r)")
   endif ()
 
   # configure a cpack properties file for custom variables in template
