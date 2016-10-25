@@ -22,6 +22,7 @@ print('crowd-agent version 2');
 - File urls for AC scripts silently fail. Use a local server (e.g., python SimpleHTTPServer) for development.
 - URLs are cached regardless of server headers. Must use cache-defeating query parameters.
 - JSON.stringify(Avatar) silently fails (even when Agent.isAvatar)
+- If you run from a dev build directory, you must link assignment-client/<target>/resources to ../../interface/<target>/resources
 */
 
 function messageSend(message) {
@@ -38,6 +39,8 @@ function getSound(data, callback) { // callback(sound) when downloaded (which ma
 function onFinishedPlaying() {
     messageSend({key: 'finishedSound'});
 }
+
+var attachment;
 
 var MILLISECONDS_IN_SECOND = 1000;
 function startAgent(parameters) { // Can also be used to update.
@@ -60,12 +63,22 @@ function startAgent(parameters) { // Can also be used to update.
         });
     }
     if (parameters.animationData) {
-        data = parameters.animationData;
+        var data = parameters.animationData;
         Avatar.startAnimation(data.url, data.fps || 30, 1.0, (data.loopFlag === undefined) ? true : data.loopFlag, false, data.startFrame || 0, data.endFrame);
+    }
+    if (parameters.attachment) {
+        attachment = parameters.attachment;
+        Avatar.attach(attachment.modelURL, attachment.jointName, attachment.translation, attachment.rotation, attachment.scale, attachment.isSoft);
+    } else {
+        attachment = undefined;
     }
     print('crowd-agent avatars started');
 }
 function stopAgent(parameters) {
+    if (attachment) {
+        Avatar.detachOne(attachment.modelURL, attachment.jointName);
+        attachment = undefined;
+    }
     Agent.isAvatar = false;
     print('crowd-agent stopped', JSON.stringify(parameters), JSON.stringify(Agent));
 }

@@ -377,9 +377,6 @@ void OpenVrDisplayPlugin::init() {
 }
 
 bool OpenVrDisplayPlugin::internalActivate() {
-    _openVrDisplayActive = true;
-    _container->setIsOptionChecked(StandingHMDSensorMode, true);
-
     if (!_system) {
         _system = acquireOpenVrSystem();
     }
@@ -387,6 +384,18 @@ bool OpenVrDisplayPlugin::internalActivate() {
         qWarning() << "Failed to initialize OpenVR";
         return false;
     }
+
+    // If OpenVR isn't running, then the compositor won't be accessible
+    // FIXME find a way to launch the compositor?
+    if (!vr::VRCompositor()) {
+        qWarning() << "Failed to acquire OpenVR compositor";
+        releaseOpenVrSystem();
+        _system = nullptr;
+        return false;
+    }
+
+    _openVrDisplayActive = true;
+    _container->setIsOptionChecked(StandingHMDSensorMode, true);
 
     _system->GetRecommendedRenderTargetSize(&_renderTargetSize.x, &_renderTargetSize.y);
     // Recommended render target size is per-eye, so double the X size for 
@@ -445,8 +454,9 @@ void OpenVrDisplayPlugin::internalDeactivate() {
     _openVrDisplayActive = false;
     _container->setIsOptionChecked(StandingHMDSensorMode, false);
     if (_system) {
-        // Invalidate poses. It's fine if someone else sets these shared values, but we're about to stop updating them, and
+        // TODO: Invalidate poses. It's fine if someone else sets these shared values, but we're about to stop updating them, and
         // we don't want ViveControllerManager to consider old values to be valid.
+        _container->makeRenderingContextCurrent();
         releaseOpenVrSystem();
         _system = nullptr;
     }
@@ -635,7 +645,11 @@ void OpenVrDisplayPlugin::postPreview() {
         _nextSimPoseData = nextSim;
     });
     _nextRenderPoseData = nextRender;
+
+    // FIXME - this looks wrong!
     _hmdActivityLevel = vr::k_EDeviceActivityLevel_UserInteraction; // _system->GetTrackedDeviceActivityLevel(vr::k_unTrackedDeviceIndex_Hmd);
+#else
+    _hmdActivityLevel = _system->GetTrackedDeviceActivityLevel(vr::k_unTrackedDeviceIndex_Hmd);
 #endif
 }
 

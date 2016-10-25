@@ -618,6 +618,7 @@ Menu::Menu() {
     addCheckableActionToQMenuAndActionHash(perfTimerMenu, MenuOption::ExpandMyAvatarSimulateTiming, 0, false);
     addCheckableActionToQMenuAndActionHash(perfTimerMenu, MenuOption::ExpandOtherAvatarTiming, 0, false);
     addCheckableActionToQMenuAndActionHash(perfTimerMenu, MenuOption::ExpandPaintGLTiming, 0, false);
+    addCheckableActionToQMenuAndActionHash(perfTimerMenu, MenuOption::ExpandPhysicsSimulationTiming, 0, false);
 
     addCheckableActionToQMenuAndActionHash(timingMenu, MenuOption::FrameTimer);
     addActionToQMenuAndActionHash(timingMenu, MenuOption::RunTimingTests, 0, qApp, SLOT(runTests()));
@@ -666,10 +667,6 @@ Menu::Menu() {
         audioScopeFramesGroup->addAction(twentyFrames);
         audioScopeFramesGroup->addAction(fiftyFrames);
     }
-
-    // Developer > Audio > Audio Network Stats...
-    addActionToQMenuAndActionHash(audioDebugMenu, MenuOption::AudioNetworkStats, 0,
-        dialogsManager.data(), SLOT(audioStatsDetails()));
 
     // Developer > Physics >>>
     MenuWrapper* physicsOptionsMenu = developerMenu->addMenu("Physics");
