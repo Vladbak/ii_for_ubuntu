@@ -88,7 +88,7 @@ static const UINT UWM_SHOW_APPLICATION =
     RegisterWindowMessage("UWM_SHOW_APPLICATION_{71123FD6-3DA8-4DC1-9C27-8A12A6250CBA}_" + qgetenv("USERNAME"));
 #endif
 
-static const QString RUNNING_MARKER_FILENAME = "Interface.running";
+static const QString RUNNING_MARKER_FILENAME = "InfinityIsland.running";
 
 class Application;
 #if defined(qApp)
