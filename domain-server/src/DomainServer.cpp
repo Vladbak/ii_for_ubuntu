@@ -1855,7 +1855,7 @@ bool DomainServer::handleHTTPSRequest(HTTPSConnection* connection, const QUrl &u
 
             QNetworkRequest tokenRequest(tokenRequestUrl);
             tokenRequest.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
-            tokenRequest.setHeader(QNetworkRequest::UserAgentHeader, HIGH_FIDELITY_USER_AGENT);
+            tokenRequest.setHeader(QNetworkRequest::UserAgentHeader, INFINITY_ISLAND_USER_AGENT);
             tokenRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
             QNetworkReply* tokenReply = NetworkAccessManager::getInstance().post(tokenRequest, tokenPostBody.toLocal8Bit());
@@ -2049,7 +2049,7 @@ QNetworkReply* DomainServer::profileRequestGivenTokenReply(QNetworkReply* tokenR
 
     QNetworkRequest profileRequest(profileURL);
     profileRequest.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
-    profileRequest.setHeader(QNetworkRequest::UserAgentHeader, HIGH_FIDELITY_USER_AGENT);
+    profileRequest.setHeader(QNetworkRequest::UserAgentHeader, INFINITY_ISLAND_USER_AGENT);
     return NetworkAccessManager::getInstance().get(profileRequest);
 }
 
