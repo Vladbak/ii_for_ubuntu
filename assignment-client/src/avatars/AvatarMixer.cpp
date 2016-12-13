@@ -19,6 +19,7 @@
 #include <QtCore/QTimer>
 #include <QtCore/QThread>
 
+#include <AABox.h>
 #include <LogHandler.h>
 #include <NodeList.h>
 #include <udt/PacketHeaders.h>
@@ -46,6 +47,7 @@ AvatarMixer::AvatarMixer(ReceivedMessage& message) :
     packetReceiver.registerListener(PacketType::AvatarIdentity, this, "handleAvatarIdentityPacket");
     packetReceiver.registerListener(PacketType::KillAvatar, this, "handleKillAvatarPacket");
     packetReceiver.registerListener(PacketType::NodeIgnoreRequest, this, "handleNodeIgnoreRequestPacket");
+    packetReceiver.registerListener(PacketType::RadiusIgnoreRequest, this, "handleRadiusIgnoreRequestPacket");
 
     auto nodeList = DependencyManager::get<NodeList>();
     connect(nodeList.data(), &NodeList::packetVersionMismatch, this, &AvatarMixer::handlePacketVersionMismatch);
@@ -230,11 +232,48 @@ void AvatarMixer::broadcastAvatarData() {
                 [&](const SharedNodePointer& otherNode)->bool {
                     // make sure we have data for this avatar, that it isn't the same node,
                     // and isn't an avatar that the viewing node has ignored
+                    // or that has ignored the viewing node
                     if (!otherNode->getLinkedData()
                         || otherNode->getUUID() == node->getUUID()
-                        || node->isIgnoringNodeWithID(otherNode->getUUID())) {
+                        || node->isIgnoringNodeWithID(otherNode->getUUID())
+                        || otherNode->isIgnoringNodeWithID(node->getUUID())) {
                         return false;
                     } else {
+                        AvatarMixerClientData* otherData = reinterpret_cast<AvatarMixerClientData*>(otherNode->getLinkedData());
+                        AvatarMixerClientData* nodeData = reinterpret_cast<AvatarMixerClientData*>(node->getLinkedData());
+                        // Check to see if the space bubble is enabled
+                        if (node->isIgnoreRadiusEnabled() || otherNode->isIgnoreRadiusEnabled()) {
+                            // Define the minimum bubble size
+                            static const glm::vec3 minBubbleSize = glm::vec3(0.3f, 1.3f, 0.3f);
+                            // Define the scale of the box for the current node
+                            glm::vec3 nodeBoxScale = (nodeData->getPosition() - nodeData->getGlobalBoundingBoxCorner()) * 2.0f;
+                            // Define the scale of the box for the current other node
+                            glm::vec3 otherNodeBoxScale = (otherData->getPosition() - otherData->getGlobalBoundingBoxCorner()) * 2.0f;
+
+                            // Set up the bounding box for the current node
+                            AABox nodeBox(nodeData->getGlobalBoundingBoxCorner(), nodeBoxScale);
+                            // Clamp the size of the bounding box to a minimum scale
+                            if (glm::any(glm::lessThan(nodeBoxScale, minBubbleSize))) {
+                                nodeBox.setScaleStayCentered(minBubbleSize);
+                            }
+                            // Set up the bounding box for the current other node
+                            AABox otherNodeBox(otherData->getGlobalBoundingBoxCorner(), otherNodeBoxScale);
+                            // Clamp the size of the bounding box to a minimum scale
+                            if (glm::any(glm::lessThan(otherNodeBoxScale, minBubbleSize))) {
+                                otherNodeBox.setScaleStayCentered(minBubbleSize);
+                            }
+                            // Quadruple the scale of both bounding boxes
+                            nodeBox.embiggen(4.0f);
+                            otherNodeBox.embiggen(4.0f);
+
+                            // Perform the collision check between the two bounding boxes
+                            if (nodeBox.touches(otherNodeBox)) {
+                                nodeData->ignoreOther(node, otherNode);
+                                return false;
+                            }
+                        }
+                        // Not close enough to ignore
+                        nodeData->removeFromRadiusIgnoringSet(otherNode->getUUID());
                         return true;
                     }
                 },
@@ -378,8 +417,9 @@ void AvatarMixer::nodeKilled(SharedNodePointer killedNode) {
 
         // this was an avatar we were sending to other people
         // send a kill packet for it to our other nodes
-        auto killPacket = NLPacket::create(PacketType::KillAvatar, NUM_BYTES_RFC4122_UUID);
+        auto killPacket = NLPacket::create(PacketType::KillAvatar, NUM_BYTES_RFC4122_UUID + sizeof(KillAvatarReason));
         killPacket->write(killedNode->getUUID().toRfc4122());
+        killPacket->writePrimitive(KillAvatarReason::AvatarDisconnected);
 
         nodeList->broadcastToNodes(std::move(killPacket), NodeSet() << NodeType::Agent);
 
@@ -438,6 +478,10 @@ void AvatarMixer::handleKillAvatarPacket(QSharedPointer<ReceivedMessage> message
 
 void AvatarMixer::handleNodeIgnoreRequestPacket(QSharedPointer<ReceivedMessage> message, SharedNodePointer senderNode) {
     senderNode->parseIgnoreRequestMessage(message);
+}
+
+void AvatarMixer::handleRadiusIgnoreRequestPacket(QSharedPointer<ReceivedMessage> packet, SharedNodePointer sendingNode) {
+    sendingNode->parseIgnoreRadiusRequestMessage(packet);
 }
 
 void AvatarMixer::sendStatsPacket() {
@@ -512,12 +556,19 @@ void AvatarMixer::domainSettingsRequestComplete() {
     auto nodeList = DependencyManager::get<NodeList>();
     nodeList->addNodeTypeToInterestSet(NodeType::Agent);
     
-    nodeList->linkedDataCreateCallback = [] (Node* node) {
-        node->setLinkedData(std::unique_ptr<AvatarMixerClientData> { new AvatarMixerClientData });
-    };
-    
     // parse the settings to pull out the values we need
     parseDomainServerSettings(nodeList->getDomainHandler().getSettingsObject());
+
+    float domainMinimumScale = _domainMinimumScale;
+    float domainMaximumScale = _domainMaximumScale;
+
+    nodeList->linkedDataCreateCallback = [domainMinimumScale, domainMaximumScale] (Node* node) {
+        auto clientData = std::unique_ptr<AvatarMixerClientData> { new AvatarMixerClientData };
+        clientData->getAvatar().setDomainMinimumScale(domainMinimumScale);
+        clientData->getAvatar().setDomainMaximumScale(domainMaximumScale);
+
+        node->setLinkedData(std::move(clientData));
+    };
     
     // start the broadcastThread
     _broadcastThread.start();
@@ -549,4 +600,22 @@ void AvatarMixer::parseDomainServerSettings(const QJsonObject& domainSettings) {
 
     _maxKbpsPerNode = nodeBandwidthValue.toDouble(DEFAULT_NODE_SEND_BANDWIDTH) * KILO_PER_MEGA;
     qDebug() << "The maximum send bandwidth per node is" << _maxKbpsPerNode << "kbps.";
+
+    const QString AVATARS_SETTINGS_KEY = "avatars";
+
+    static const QString MIN_SCALE_OPTION = "min_avatar_scale";
+    float settingMinScale = domainSettings[AVATARS_SETTINGS_KEY].toObject()[MIN_SCALE_OPTION].toDouble(MIN_AVATAR_SCALE);
+    _domainMinimumScale = glm::clamp(settingMinScale, MIN_AVATAR_SCALE, MAX_AVATAR_SCALE);
+
+    static const QString MAX_SCALE_OPTION = "max_avatar_scale";
+    float settingMaxScale = domainSettings[AVATARS_SETTINGS_KEY].toObject()[MAX_SCALE_OPTION].toDouble(MAX_AVATAR_SCALE);
+    _domainMaximumScale = glm::clamp(settingMaxScale, MIN_AVATAR_SCALE, MAX_AVATAR_SCALE);
+
+    // make sure that the domain owner didn't flip min and max
+    if (_domainMinimumScale > _domainMaximumScale) {
+        std::swap(_domainMinimumScale, _domainMaximumScale);
+    }
+
+    qDebug() << "This domain requires a minimum avatar scale of" << _domainMinimumScale
+        << "and a maximum avatar scale of" << _domainMaximumScale;
 }

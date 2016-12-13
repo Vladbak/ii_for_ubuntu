@@ -127,6 +127,8 @@ public:
     void setPositionGetter(AudioPositionGetter positionGetter) { _positionGetter = positionGetter; }
     void setOrientationGetter(AudioOrientationGetter orientationGetter) { _orientationGetter = orientationGetter; }
     
+    Q_INVOKABLE void setAvatarBoundingBoxParameters(glm::vec3 corner, glm::vec3 scale);
+
     QVector<AudioInjector*>& getActiveLocalAudioInjectors() { return _activeLocalAudioInjectors; }
 
     void checkDevices();
@@ -155,6 +157,8 @@ public slots:
     void audioMixerKilled();
     void toggleMute();
 
+    void beforeAboutToQuit();
+
     virtual void setIsStereoInput(bool stereo) override;
 
     void toggleAudioNoiseReduction() { _isNoiseGateEnabled = !_isNoiseGateEnabled; }
@@ -167,7 +171,7 @@ public slots:
 
     int setOutputBufferSize(int numFrames, bool persist = true);
 
-    bool outputLocalInjector(bool isStereo, AudioInjector* injector) override;
+    bool outputLocalInjector(AudioInjector* injector) override;
     bool shouldLoopbackInjectors() override { return _shouldEchoToServer; }
 
     bool switchInputToAudioDevice(const QString& inputDeviceName);
@@ -295,7 +299,7 @@ private:
 
     // for local hrtf-ing
     float _mixBuffer[AudioConstants::NETWORK_FRAME_SAMPLES_STEREO];
-    int16_t _scratchBuffer[AudioConstants::NETWORK_FRAME_SAMPLES_STEREO];
+    int16_t _scratchBuffer[AudioConstants::NETWORK_FRAME_SAMPLES_AMBISONIC];
     AudioLimiter _audioLimiter;
 
     // Adds Reverb
@@ -322,6 +326,9 @@ private:
     AudioPositionGetter _positionGetter;
     AudioOrientationGetter _orientationGetter;
 
+    glm::vec3 avatarBoundingBoxCorner;
+    glm::vec3 avatarBoundingBoxScale;
+
     QVector<QString> _inputDevices;
     QVector<QString> _outputDevices;
 
@@ -332,6 +339,8 @@ private:
     CodecPluginPointer _codec;
     QString _selectedCodecName;
     Encoder* _encoder { nullptr }; // for outbound mic stream
+
+    QThread* _checkDevicesThread { nullptr };
 };
 
 

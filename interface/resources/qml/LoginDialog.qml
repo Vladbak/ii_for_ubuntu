@@ -40,7 +40,6 @@ ModalWindow {
 
         Loader {
             id: bodyLoader
-            anchors.fill: parent
             source: "LoginDialog/UtiiBody.qml"
         }
     }

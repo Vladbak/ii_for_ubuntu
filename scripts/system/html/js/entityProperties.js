@@ -445,13 +445,11 @@ function hideUserDataTextArea() {
 };
 
 function showStaticUserData() {
-    $('#static-userdata').show();
-    $('#static-userdata').css('height', $('#userdata-editor').height())
     if (editor !== null) {
+        $('#static-userdata').show();
+        $('#static-userdata').css('height', $('#userdata-editor').height())
         $('#static-userdata').text(editor.getText());
     }
-
-
 };
 
 function removeStaticUserData() {
@@ -1492,7 +1490,7 @@ function loaded() {
         var lis = dropdown.parentNode.getElementsByTagName("li");
         var text = "";
         for (var i = 0; i < lis.length; i++) {
-            if (lis[i].getAttribute("value") === dropdown.value) {
+            if (String(lis[i].getAttribute("value")) === String(dropdown.value)) {
                 text = lis[i].textContent;
             }
         }

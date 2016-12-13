@@ -360,7 +360,6 @@ void OpenGLDisplayPlugin::customizeContext() {
                 auto usage = gpu::Texture::Usage::Builder().withColor().withAlpha();
                 cursorData.texture->setUsage(usage.build());
                 cursorData.texture->assignStoredMip(0, gpu::Element(gpu::VEC4, gpu::NUINT8, gpu::RGBA), image.byteCount(), image.constBits());
-                cursorData.texture->autoGenerateMips(-1);
             }
         }
     }
@@ -758,7 +757,6 @@ void OpenGLDisplayPlugin::render(std::function<void(gpu::Batch& batch)> f) {
 
 
 OpenGLDisplayPlugin::~OpenGLDisplayPlugin() {
-    qDebug() << "Destroying OpenGLDisplayPlugin";
 }
 
 void OpenGLDisplayPlugin::updateCompositeFramebuffer() {

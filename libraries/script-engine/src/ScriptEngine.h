@@ -146,6 +146,8 @@ public:
 
     Q_INVOKABLE void requestGarbageCollection() { collectGarbage(); }
 
+    Q_INVOKABLE QUuid generateUUID() { return QUuid::createUuid(); }
+
     bool isFinished() const { return _isFinished; } // used by Application and ScriptWidget
     bool isRunning() const { return _isRunning; } // used by ScriptWidget
 
@@ -243,6 +245,7 @@ protected:
 
     std::function<bool()> _emitScriptUpdates{ [](){ return true; }  };
 
+    std::recursive_mutex _lock;
 };
 
 #endif // hifi_ScriptEngine_h

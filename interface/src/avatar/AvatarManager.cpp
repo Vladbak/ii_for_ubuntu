@@ -36,6 +36,7 @@
 #include "Application.h"
 #include "Avatar.h"
 #include "AvatarManager.h"
+#include "InterfaceLogging.h"
 #include "Menu.h"
 #include "MyAvatar.h"
 #include "SceneScriptingInterface.h"
@@ -79,7 +80,7 @@ AvatarManager::AvatarManager(QObject* parent) :
 
     // when we hear that the user has ignored an avatar by session UUID
     // immediately remove that avatar instead of waiting for the absence of packets from avatar mixer
-    connect(nodeList.data(), &NodeList::ignoredNode, this, &AvatarManager::removeAvatar);
+    connect(nodeList.data(), "ignoredNode", this, "removeAvatar");
 }
 
 AvatarManager::~AvatarManager() {
@@ -208,26 +209,30 @@ AvatarSharedPointer AvatarManager::addAvatar(const QUuid& sessionUUID, const QWe
     auto rawRenderableAvatar = std::static_pointer_cast<Avatar>(newAvatar);
 
     render::ScenePointer scene = qApp->getMain3DScene();
-    render::PendingChanges pendingChanges;
-    if (DependencyManager::get<SceneScriptingInterface>()->shouldRenderAvatars()) {
-        rawRenderableAvatar->addToScene(rawRenderableAvatar, scene, pendingChanges);
+    if (scene) {
+        render::PendingChanges pendingChanges;
+        if (DependencyManager::get<SceneScriptingInterface>()->shouldRenderAvatars()) {
+            rawRenderableAvatar->addToScene(rawRenderableAvatar, scene, pendingChanges);
+        }
+        scene->enqueuePendingChanges(pendingChanges);
+    } else {
+        qCWarning(interfaceapp) << "AvatarManager::addAvatar() : Unexpected null scene, possibly during application shutdown";
     }
-    scene->enqueuePendingChanges(pendingChanges);
 
     return newAvatar;
 }
 
 // virtual
-void AvatarManager::removeAvatar(const QUuid& sessionUUID) {
+void AvatarManager::removeAvatar(const QUuid& sessionUUID, KillAvatarReason removalReason) {
     QWriteLocker locker(&_hashLock);
 
     auto removedAvatar = _avatarHash.take(sessionUUID);
     if (removedAvatar) {
-        handleRemovedAvatar(removedAvatar);
+        handleRemovedAvatar(removedAvatar, removalReason);
     }
 }
 
-void AvatarManager::handleRemovedAvatar(const AvatarSharedPointer& removedAvatar) {
+void AvatarManager::handleRemovedAvatar(const AvatarSharedPointer& removedAvatar, KillAvatarReason removalReason) {
     AvatarHashMap::handleRemovedAvatar(removedAvatar);
 
     // removedAvatar is a shared pointer to an AvatarData but we need to get to the derived Avatar
@@ -242,6 +247,9 @@ void AvatarManager::handleRemovedAvatar(const AvatarSharedPointer& removedAvatar
         _motionStatesToRemoveFromPhysics.push_back(motionState);
     }
 
+    if (removalReason == KillAvatarReason::TheirAvatarEnteredYourBubble) {
+        emit DependencyManager::get<UsersScriptingInterface>()->enteredIgnoreRadius();
+    }
     _avatarFades.push_back(removedAvatar);
 }
 

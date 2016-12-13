@@ -62,13 +62,14 @@ var TIP_TEXTURE_BASE_URL = BASE_URL + "meshes/controller/vive_tips.fbm/";
 
 var viveModelURL = BASE_URL + "meshes/controller/vive_body.fbx";
 var viveTipsModelURL = BASE_URL + "meshes/controller/vive_tips.fbx";
+var viveTriggerModelURL = "meshes/controller/vive_trigger.fbx"
 
 VIVE_CONTROLLER_CONFIGURATION_LEFT = {
     name: "Vive",
     controllers: [
         {
             modelURL: viveModelURL,
-            jointIndex: MyAvatar.getJointIndex("_CONTROLLER_LEFTHAND"),
+            jointIndex: MyAvatar.getJointIndex("_CAMERA_RELATIVE_CONTROLLER_LEFTHAND"),
             naturalPosition: viveNaturalPosition,
             rotation: leftBaseRotation,
             position: Vec3.multiplyQbyV(Quat.fromPitchYawRollDegrees(0, 0, 45), leftBasePosition),
@@ -86,7 +87,7 @@ VIVE_CONTROLLER_CONFIGURATION_LEFT = {
                     defaultTextureLayer: "blank",
                     textureLayers: {
                         blank: {
-                            defaultTextureURL: TIP_TEXTURE_BASE_URL + "Blank.png"
+                            defaultTextureURL: TIP_TEXTURE_BASE_URL + "/Blank.png"
                         },
                         trigger: {
                             defaultTextureURL: TIP_TEXTURE_BASE_URL + "/Trigger.png"
@@ -141,7 +142,18 @@ VIVE_CONTROLLER_CONFIGURATION_LEFT = {
                     minValue: 0.0,
                     maxValue: 1.0,
                     axis: { x: -1, y: 0, z: 0 },
-                    maxAngle: 20
+                    maxAngle: 25,
+
+                    textureName: "Tex.black-trigger",
+                    defaultTextureLayer: "normal",
+                    textureLayers: {
+                        normal: {
+                            defaultTextureURL: BASE_URL + viveTriggerModelURL + "/Trigger.fbm/black.jpg",
+                        },
+                        highlight: {
+                            defaultTextureURL: BASE_URL + viveTriggerModelURL + "/Trigger.fbm/yellow.jpg",
+                        }
+                    }
                 },
 
                 l_grip: {
@@ -183,8 +195,7 @@ VIVE_CONTROLLER_CONFIGURATION_RIGHT = {
     controllers: [
         {
             modelURL: viveModelURL,
-            jointIndex: MyAvatar.getJointIndex("_CONTROLLER_RIGHTHAND"),
-
+            jointIndex: MyAvatar.getJointIndex("_CAMERA_RELATIVE_CONTROLLER_RIGHTHAND"),
             rotation: rightBaseRotation,
             position: Vec3.multiplyQbyV(Quat.fromPitchYawRollDegrees(0, 0, -45), rightBasePosition),
 
@@ -262,7 +273,18 @@ VIVE_CONTROLLER_CONFIGURATION_RIGHT = {
                     minValue: 0.0,
                     maxValue: 1.0,
                     axis: { x: -1, y: 0, z: 0 },
-                    maxAngle: 25
+                    maxAngle: 25,
+
+                    textureName: "Tex.black-trigger",
+                    defaultTextureLayer: "normal",
+                    textureLayers: {
+                        normal: {
+                            defaultTextureURL: BASE_URL + viveTriggerModelURL + "/Trigger.fbm/black.jpg",
+                        },
+                        highlight: {
+                            defaultTextureURL: BASE_URL + viveTriggerModelURL + "/Trigger.fbm/yellow.jpg",
+                        }
+                    }
                 },
 
                 l_grip: {

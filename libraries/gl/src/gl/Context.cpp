@@ -19,9 +19,10 @@
 #include <QtGui/QWindow>
 #include <QtGui/QGuiApplication>
 
+#include <shared/AbstractLoggerInterface.h>
+#include <shared/GlobalAppProperties.h>
 #include <GLMHelpers.h>
 #include "GLLogging.h"
-
 
 #ifdef Q_OS_WIN
 
@@ -37,8 +38,28 @@ static bool enableDebugLogger = QProcessEnvironment::systemEnvironment().contain
 #include "Config.h"
 #include "GLHelpers.h"
 
-
 using namespace gl;
+
+
+std::atomic<size_t> Context::_totalSwapchainMemoryUsage { 0 };
+
+size_t Context::getSwapchainMemoryUsage() { return _totalSwapchainMemoryUsage.load(); }
+
+size_t Context::evalSurfaceMemoryUsage(uint32_t width, uint32_t height, uint32_t pixelSize) {
+    return width * height * pixelSize;
+}
+
+void Context::updateSwapchainMemoryUsage(size_t prevSize, size_t newSize) {
+    if (prevSize == newSize) {
+        return;
+    }
+    if (newSize > prevSize) {
+        _totalSwapchainMemoryUsage.fetch_add(newSize - prevSize);
+    } else {
+        _totalSwapchainMemoryUsage.fetch_sub(prevSize - newSize);
+    }
+}
+
 
 Context* Context::PRIMARY = nullptr;
 
@@ -78,26 +99,44 @@ void Context::release() {
     if (PRIMARY == this) {
         PRIMARY = nullptr;
     }
-    }
+    updateSwapchainMemoryCounter();
+}
 
 Context::~Context() {
     release();
 }
 
+void Context::updateSwapchainMemoryCounter() {
+    if (_window) {
+        auto newSize = _window->size();
+        auto newMemSize = gl::Context::evalSurfaceMemoryUsage(newSize.width(), newSize.height(), (uint32_t) _swapchainPixelSize);
+        gl::Context::updateSwapchainMemoryUsage(_swapchainMemoryUsage, newMemSize);
+        _swapchainMemoryUsage = newMemSize;
+    } else {
+        // No window ? no more swapchain
+        gl::Context::updateSwapchainMemoryUsage(_swapchainMemoryUsage, 0);
+        _swapchainMemoryUsage = 0;
+    }
+}
+
 void Context::setWindow(QWindow* window) {
     release();
     _window = window;
+
 #ifdef Q_OS_WIN
     _hwnd = (HWND)window->winId();
 #endif
+
+    updateSwapchainMemoryCounter();
 }
 
 #ifdef Q_OS_WIN
-static const char* PRIMARY_CONTEXT_PROPERTY_NAME = "com.highfidelity.gl.primaryContext";
 
 bool Context::makeCurrent() {
     BOOL result = wglMakeCurrent(_hdc, _hglrc);
     assert(result);
+    updateSwapchainMemoryCounter();
+
     return result;
 }
 
@@ -113,7 +152,17 @@ void GLAPIENTRY debugMessageCallback(GLenum source, GLenum type, GLuint id, GLen
     if (GL_DEBUG_SEVERITY_NOTIFICATION == severity) {
         return;
     }
-    qCDebug(glLogging) << "QQQ " << message;
+    qCDebug(glLogging) << "OpenGL: " << message;
+    
+    // For high severity errors, force a sync to the log, since we might crash 
+    // before the log file was flushed otherwise.  Performance hit here
+    if (GL_DEBUG_SEVERITY_HIGH == severity) {
+        AbstractLoggerInterface* logger = AbstractLoggerInterface::get();
+        if (logger) {
+            // FIXME find a way to force the log file to sync that doesn't lead to a deadlock
+            // logger->sync();
+        }
+    }
 }
 
 // FIXME build the PFD based on the 
@@ -152,7 +201,7 @@ void setupPixelFormatSimple(HDC hdc) {
 
 void Context::create() {
     if (!PRIMARY) {
-        PRIMARY = static_cast<Context*>(qApp->property(PRIMARY_CONTEXT_PROPERTY_NAME).value<void*>());
+        PRIMARY = static_cast<Context*>(qApp->property(hifi::properties::gl::PRIMARY_CONTEXT).value<void*>());
     }
 
     if (PRIMARY) {
@@ -165,6 +214,11 @@ void Context::create() {
     // Create a temporary context to initialize glew
     static std::once_flag once;
     std::call_once(once, [&] {
+        // If the previous run crashed, force GL debug logging on
+        if (qApp->property(hifi::properties::CRASHED).toBool()) {
+            enableDebugLogger = true;
+        }
+
         auto hdc = GetDC(hwnd);
         setupPixelFormatSimple(hdc);
         auto glrc = wglCreateContext(hdc);
@@ -217,6 +271,11 @@ void Context::create() {
         wglChoosePixelFormatARB(_hdc, &formatAttribs[0], NULL, 1, &pixelFormat, &numFormats);
         DescribePixelFormat(_hdc, pixelFormat, sizeof(pfd), &pfd);
     }
+    // The swap chain  pixel size for swap chains is : rgba32 + depth24stencil8
+    // We don't apply the length of the swap chain into this pixelSize since it is not vsible for the Process (on windows).
+    _swapchainPixelSize = 32 + 32;
+    updateSwapchainMemoryCounter();
+
     SetPixelFormat(_hdc, pixelFormat, &pfd);
     {
         std::vector<int> contextAttribs;
@@ -245,7 +304,7 @@ void Context::create() {
 
     if (!PRIMARY) {
         PRIMARY = this;
-        qApp->setProperty(PRIMARY_CONTEXT_PROPERTY_NAME, QVariant::fromValue((void*)PRIMARY));
+        qApp->setProperty(hifi::properties::gl::PRIMARY_CONTEXT, QVariant::fromValue((void*)PRIMARY));
     }
 
     if (enableDebugLogger) {
@@ -277,6 +336,8 @@ void OffscreenContext::create() {
         _window->setSurfaceType(QSurface::OpenGLSurface);
         _window->create();
         setWindow(_window);
+        QSize windowSize = _window->size() * _window->devicePixelRatio();
+        qCDebug(glLogging) << "New Offscreen GLContext, window size = " << windowSize.width() << " , " << windowSize.height();
         QGuiApplication::processEvents();
     }
     Parent::create();

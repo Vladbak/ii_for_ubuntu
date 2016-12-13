@@ -25,6 +25,8 @@
 #include <PerfStat.h>
 #include <plugins/DisplayPlugin.h>
 
+#include <gl/Context.h>
+
 #include "BandwidthRecorder.h"
 #include "Menu.h"
 #include "Util.h"
@@ -94,6 +96,8 @@ bool Stats::includeTimingRecord(const QString& name) {
         } \
     }
 
+extern std::atomic<size_t> DECIMATED_TEXTURE_COUNT;
+extern std::atomic<size_t> RECTIFIED_TEXTURE_COUNT;
 
 void Stats::updateStats(bool force) {
     if (!force) {
@@ -124,7 +128,8 @@ void Stats::updateStats(bool force) {
         STAT_UPDATE(renderrate, displayPlugin->renderRate());
         STAT_UPDATE(presentrate, displayPlugin->presentRate());
         STAT_UPDATE(presentnewrate, displayPlugin->newFramePresentRate());
-        STAT_UPDATE(presentdroprate, qApp->getActiveDisplayPlugin()->droppedFrameRate());
+        STAT_UPDATE(presentdroprate, displayPlugin->droppedFrameRate());
+        STAT_UPDATE(stutterrate, displayPlugin->stutterRate());
     } else {
         STAT_UPDATE(presentrate, -1);
         STAT_UPDATE(presentnewrate, -1);
@@ -286,15 +291,28 @@ void Stats::updateStats(bool force) {
         STAT_UPDATE(sendingMode, sendingModeResult);
     }
 
+    auto gpuContext = qApp->getGPUContext();
+
+    // Update Frame timing (in ms)
+    STAT_UPDATE(gpuFrameTime, (float)gpuContext->getFrameTimerGPUAverage());
+    STAT_UPDATE(batchFrameTime, (float)gpuContext->getFrameTimerBatchAverage());
+
     STAT_UPDATE(gpuBuffers, (int)gpu::Context::getBufferGPUCount());
+    STAT_UPDATE(gpuBufferMemory, (int)BYTES_TO_MB(gpu::Context::getBufferGPUMemoryUsage()));
     STAT_UPDATE(gpuTextures, (int)gpu::Context::getTextureGPUCount());
     STAT_UPDATE(gpuTexturesSparse, (int)gpu::Context::getTextureGPUSparseCount());
+
+    STAT_UPDATE(glContextSwapchainMemory, (int)BYTES_TO_MB(gl::Context::getSwapchainMemoryUsage()));
+
     STAT_UPDATE(qmlTextureMemory, (int)BYTES_TO_MB(OffscreenQmlSurface::getUsedTextureMemory()));
     STAT_UPDATE(gpuTextureMemory, (int)BYTES_TO_MB(gpu::Texture::getTextureGPUMemoryUsage()));
     STAT_UPDATE(gpuTextureVirtualMemory, (int)BYTES_TO_MB(gpu::Texture::getTextureGPUVirtualMemoryUsage()));
+    STAT_UPDATE(gpuTextureFramebufferMemory, (int)BYTES_TO_MB(gpu::Texture::getTextureGPUFramebufferMemoryUsage()));
     STAT_UPDATE(gpuTextureSparseMemory, (int)BYTES_TO_MB(gpu::Texture::getTextureGPUSparseMemoryUsage()));
-    STAT_UPDATE(gpuSparseTextureEnabled, gpu::Texture::getEnableSparseTextures() ? 1 : 0);
+    STAT_UPDATE(gpuSparseTextureEnabled, gpuContext->getBackend()->isTextureManagementSparseEnabled() ? 1 : 0);
     STAT_UPDATE(gpuFreeMemory, (int)BYTES_TO_MB(gpu::Context::getFreeGPUMemory()));
+    STAT_UPDATE(rectifiedTextureCount, (int)RECTIFIED_TEXTURE_COUNT.load());
+    STAT_UPDATE(decimatedTextureCount, (int)DECIMATED_TEXTURE_COUNT.load());
 
     // Incoming packets
     QLocale locale(QLocale::English);

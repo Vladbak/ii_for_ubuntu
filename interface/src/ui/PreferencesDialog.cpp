@@ -23,6 +23,7 @@
 #include "LODManager.h"
 #include "Menu.h"
 #include "Snapshot.h"
+#include "SnapshotAnimated.h"
 #include "UserActivityLogger.h"
 
 #include "AmbientOcclusionEffect.h"
@@ -31,7 +32,7 @@
 
 void setupPreferences() {
     auto preferences = DependencyManager::get<Preferences>();
-
+    auto nodeList = DependencyManager::get<NodeList>();
     auto myAvatar = DependencyManager::get<AvatarManager>()->getMyAvatar();
     static const QString AVATAR_BASICS { "Avatar Basics" };
     {
@@ -68,12 +69,33 @@ void setupPreferences() {
         preferences->addPreference(new CheckPreference(AVATAR_BASICS, "Clear overlays when moving", getter, setter));
     }
 
+    // UI
+    {
+        auto getter = []()->bool { return qApp->getSettingConstrainToolbarPosition(); };
+        auto setter = [](bool value) { qApp->setSettingConstrainToolbarPosition(value); };
+        preferences->addPreference(new CheckPreference("UI", "Constrain Toolbar Position to Horizontal Center", getter, setter));
+    }
+
     // Snapshots
     static const QString SNAPSHOTS { "Snapshots" };
     {
         auto getter = []()->QString { return Snapshot::snapshotsLocation.get(); };
         auto setter = [](const QString& value) { Snapshot::snapshotsLocation.set(value); };
         auto preference = new BrowsePreference(SNAPSHOTS, "Put my snapshots here", getter, setter);
+        preferences->addPreference(preference);
+    }
+    {
+        auto getter = []()->bool { return SnapshotAnimated::alsoTakeAnimatedSnapshot.get(); };
+        auto setter = [](bool value) { SnapshotAnimated::alsoTakeAnimatedSnapshot.set(value); };
+        preferences->addPreference(new CheckPreference(SNAPSHOTS, "Take Animated GIF Snapshot with HUD Button", getter, setter));
+    }
+    {
+        auto getter = []()->float { return SnapshotAnimated::snapshotAnimatedDuration.get(); };
+        auto setter = [](float value) { SnapshotAnimated::snapshotAnimatedDuration.set(value); };
+        auto preference = new SpinnerPreference(SNAPSHOTS, "Animated Snapshot Duration", getter, setter);
+        preference->setMin(1);
+        preference->setMax(5);
+        preference->setStep(1);
         preferences->addPreference(preference);
     }
 

@@ -16,6 +16,7 @@
 #include <QRegExp>
 #include <QStringList>
 
+#include <BuildInfo.h>
 #include <GLMHelpers.h>
 #include <NumericalConstants.h>
 #include <SettingHandle.h>
@@ -23,10 +24,16 @@
 
 #include "AddressManager.h"
 #include "NodeList.h"
+#include "NetworkingConstants.h"
 #include "NetworkLogging.h"
 #include "UserActivityLogger.h"
 #include "udt/PacketHeaders.h"
 
+#if USE_STABLE_GLOBAL_SERVICES
+const QString DEFAULT_HIFI_ADDRESS = "hifi://welcome";
+#else
+const QString DEFAULT_HIFI_ADDRESS = "hifi://dev-welcome";
+#endif
 
 const QString ADDRESS_MANAGER_SETTINGS_GROUP = "AddressManager";
 const QString SETTINGS_CURRENT_ADDRESS_KEY = "address";
@@ -47,7 +54,7 @@ bool AddressManager::isConnected() {
     return DependencyManager::get<NodeList>()->getDomainHandler().isConnected();
 }
 
-QUrl AddressManager::currentAddress() const {
+QUrl AddressManager::currentAddress(bool domainOnly) const {
     QUrl hifiURL;
 
     hifiURL.setScheme(HIFI_URL_SCHEME);
@@ -57,7 +64,9 @@ QUrl AddressManager::currentAddress() const {
         hifiURL.setPort(_port);
     }
     
-    hifiURL.setPath(currentPath());
+    if (!domainOnly) {
+        hifiURL.setPath(currentPath());
+    }
 
     return hifiURL;
 }
@@ -69,8 +78,7 @@ QUrl AddressManager::currentFacingAddress() const {
     return hifiURL;
 }
 
-
-QUrl AddressManager::currentShareableAddress() const {
+QUrl AddressManager::currentShareableAddress(bool domainOnly) const {
     if (!_shareablePlaceName.isEmpty()) {
         // if we have a shareable place name use that instead of whatever the current host is
         QUrl hifiURL;
@@ -78,11 +86,13 @@ QUrl AddressManager::currentShareableAddress() const {
         hifiURL.setScheme(HIFI_URL_SCHEME);
         hifiURL.setHost(_shareablePlaceName);
 
-        hifiURL.setPath(currentPath());
+        if (!domainOnly) {
+            hifiURL.setPath(currentPath());
+        }
 
         return hifiURL;
     } else {
-        return currentAddress();
+        return currentAddress(domainOnly);
     }
 }
 
@@ -739,6 +749,14 @@ void AddressManager::copyAddress() {
 
 void AddressManager::copyPath() {
     QApplication::clipboard()->setText(currentPath());
+}
+
+QString AddressManager::getDomainId() const {
+    return DependencyManager::get<NodeList>()->getDomainHandler().getUUID().toString();
+}
+
+const QUrl AddressManager::getMetaverseServerUrl() const {
+    return NetworkingConstants::METAVERSE_SERVER_URL;
 }
 
 void AddressManager::handleShareableNameAPIResponse(QNetworkReply& requestReply) {

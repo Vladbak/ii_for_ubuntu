@@ -30,6 +30,7 @@
 #include <QtNetwork/QUdpSocket>
 
 #include <DependencyManager.h>
+#include <SettingHandle.h>
 
 #include "DomainHandler.h"
 #include "LimitedNodeList.h"
@@ -51,8 +52,8 @@ class NodeList : public LimitedNodeList {
     SINGLETON_DEPENDENCY
 
 public:
-    NodeType_t getOwnerType() const { return _ownerType; }
-    void setOwnerType(NodeType_t ownerType) { _ownerType = ownerType; }
+    NodeType_t getOwnerType() const { return _ownerType.load(); }
+    void setOwnerType(NodeType_t ownerType) { _ownerType.store(ownerType); }
 
     Q_INVOKABLE qint64 sendStats(QJsonObject statsObject, HifiSockAddr destination);
     Q_INVOKABLE qint64 sendStatsToDomainServer(QJsonObject statsObject);
@@ -70,10 +71,16 @@ public:
     
     void setIsShuttingDown(bool isShuttingDown) { _isShuttingDown = isShuttingDown; }
 
+    void ignoreNodesInRadius(bool enabled = true);
+    bool getIgnoreRadiusEnabled() const { return _ignoreRadiusEnabled.get(); }
+    void toggleIgnoreRadius() { ignoreNodesInRadius(!getIgnoreRadiusEnabled()); }
+    void enableIgnoreRadius() { ignoreNodesInRadius(true); }
+    void disableIgnoreRadius() { ignoreNodesInRadius(false); }
     void ignoreNodeBySessionID(const QUuid& nodeID);
     bool isIgnoringNode(const QUuid& nodeID) const;
 
     void kickNodeBySessionID(const QUuid& nodeID);
+    void muteNodeBySessionID(const QUuid& nodeID);
 
 public slots:
     void reset();
@@ -100,7 +107,8 @@ signals:
     void limitOfSilentDomainCheckInsReached();
     void receivedDomainServerList();
     void ignoredNode(const QUuid& nodeID);
-    
+    void ignoreRadiusEnabledChanged(bool isIgnored);
+
 private slots:
     void stopKeepalivePingTimer();
     void sendPendingDSPathQuery();
@@ -134,7 +142,7 @@ private:
 
     bool sockAddrBelongsToDomainOrNode(const HifiSockAddr& sockAddr);
 
-    NodeType_t _ownerType;
+    std::atomic<NodeType_t> _ownerType;
     NodeSet _nodeTypesOfInterest;
     DomainHandler _domainHandler;
     int _numNoReplyDomainCheckIns;
@@ -144,6 +152,9 @@ private:
 
     mutable QReadWriteLock _ignoredSetLock;
     tbb::concurrent_unordered_set<QUuid, UUIDHasher> _ignoredNodeIDs;
+
+    void sendIgnoreRadiusStateToNode(const SharedNodePointer& destinationNode);
+    Setting::Handle<bool> _ignoreRadiusEnabled { "IgnoreRadiusEnabled", true };
 
 #if (PR_BUILD || DEV_BUILD)
     bool _shouldSendNewerVersion { false };

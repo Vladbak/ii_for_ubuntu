@@ -10,6 +10,7 @@
 #ifndef hifi_GLHelpers_h
 #define hifi_GLHelpers_h
 
+#include <functional>
 #include <QJsonObject>
 
 // 16 bits of depth precision
@@ -26,10 +27,16 @@ class QGLFormat;
 template<class F>
 void setGLFormatVersion(F& format, int major = 4, int minor = 5) { format.setVersion(major, minor); }
 
+size_t evalGLFormatSwapchainPixelSize(const QSurfaceFormat& format);
+
 const QSurfaceFormat& getDefaultOpenGLSurfaceFormat();
 QJsonObject getGLContextData();
 int glVersionToInteger(QString glVersion);
 
 bool isRenderThread();
+
+namespace gl {
+    void withSavedContext(const std::function<void()>& f);
+}
 
 #endif

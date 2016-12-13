@@ -42,7 +42,7 @@ const appIcon = path.join(__dirname, '../resources/console.png');
 const DELETE_LOG_FILES_OLDER_THAN_X_SECONDS = 60 * 60 * 24 * 7; // 7 Days
 const LOG_FILE_REGEX = /(domain-server|ac-monitor|ac)-.*-std(out|err).txt/;
 
-const HOME_CONTENT_URL = "http://cachefly.highfidelity.com/home-tutorial-9.tar.gz";
+const HOME_CONTENT_URL = "http://cachefly.highfidelity.com/home-tutorial-release-5572.tar.gz";
 
 function getBuildInfo() {
     var buildInfoPath = null;
@@ -163,17 +163,19 @@ function shutdownCallback(idx) {
         if (homeServer.state == ProcessGroupStates.STOPPED) {
             // if the home server is already down, take down the server console now
             log.debug("Quitting.");
-            app.quit();
+            app.exit(0);
         } else {
             // if the home server is still running, wait until we get a state change or timeout
             // before quitting the app
             log.debug("Server still shutting down. Waiting");
-            var timeoutID = setTimeout(app.quit, 5000);
+            var timeoutID = setTimeout(function() {
+                app.exit(0);
+            }, 5000);
             homeServer.on('state-update', function(processGroup) {
                 if (processGroup.state == ProcessGroupStates.STOPPED) {
                     clearTimeout(timeoutID);
                     log.debug("Quitting.");
-                    app.quit();
+                    app.exit(0);
                 }
             });
         }
@@ -240,7 +242,7 @@ var shouldQuit = app.makeSingleInstance(function(commandLine, workingDirectory) 
 
 if (shouldQuit) {
     log.warn("Another instance of the Sandbox is already running - this instance will quit.");
-    app.quit();
+    app.exit(0);
     return;
 }
 
@@ -288,12 +290,12 @@ function binaryMissingMessage(displayName, executableName, required) {
 
 if (!dsPath) {
     dialog.showErrorBox("Domain Server Not Found", binaryMissingMessage("domain-server", "domain-server", true));
-    app.quit();
+    app.exit(0);
 }
 
 if (!acPath) {
     dialog.showErrorBox("Assignment Client Not Found", binaryMissingMessage("assignment-client", "assignment-client", true));
-    app.quit();
+    app.exit(0);
 }
 
 function openFileBrowser(path) {
@@ -577,6 +579,10 @@ function backupResourceDirectoriesAndRestart() {
 }
 
 function checkNewContent() {
+    if (argv.noUpdater) {
+      return;
+    }
+    
     // Start downloading content set
     var req = request.head({
         url: HOME_CONTENT_URL
@@ -600,7 +606,7 @@ function checkNewContent() {
                   buttons: ['Yes', 'No'],
                   defaultId: 1,
                   cancelId: 1,
-                  title: 'New home content',
+                  title: 'High Fidelity Sandbox',
                   message: 'A newer version of the home content set is available.\nDo you wish to update?',
                   noLink: true,
               }, function(idx) {
@@ -621,6 +627,7 @@ function checkNewContent() {
                   } else {
                       // They don't want to update, mark content set as current
                       userConfig.set('homeContentLastModified', new Date());
+                      userConfig.save(configPath);
                   }
               });
             }
@@ -674,6 +681,7 @@ function maybeInstallDefaultContentSet(onComplete) {
             }
             log.debug('Copied home content over to: ' + getRootHifiDataDirectory());
             userConfig.set('homeContentLastModified', new Date());
+            userConfig.save(configPath);
             onComplete();
         });
         return;
@@ -754,6 +762,7 @@ function maybeInstallDefaultContentSet(onComplete) {
             // response and decompression complete, return
             log.debug("Finished unarchiving home content set");
             userConfig.set('homeContentLastModified', new Date());
+            userConfig.save(configPath);
             sendStateUpdate('complete');
         });
 
@@ -764,6 +773,7 @@ function maybeInstallDefaultContentSet(onComplete) {
         });
 
         userConfig.set('hasRun', true);
+        userConfig.save(configPath);
     });
 }
 
@@ -812,9 +822,10 @@ for (var key in trayIcons) {
 const notificationIcon = path.join(__dirname, '../resources/console-notification.png');
 
 function onContentLoaded() {
-    maybeShowSplash();
+    // Disable splash window for now.
+    // maybeShowSplash();
 
-    if (buildInfo.releaseType == 'PRODUCTION') {
+    if (buildInfo.releaseType == 'PRODUCTION' && !argv.noUpdater) {
         var currentVersion = null;
         try {
             currentVersion = parseInt(buildInfo.buildIdentifier);
@@ -863,6 +874,12 @@ function onContentLoaded() {
 
         // start the home server
         homeServer.start();
+    }
+
+    // If we were launched with the launchInterface option, then we need to launch interface now
+    if (argv.launchInterface) {
+        log.debug("Interface launch requested... argv.launchInterface:", argv.launchInterface);
+        startInterface();
     }
 
     // If we were launched with the shutdownWatcher option, then we need to watch for the interface app

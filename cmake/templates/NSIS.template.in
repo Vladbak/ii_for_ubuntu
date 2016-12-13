@@ -137,10 +137,6 @@ Var AR_RegFlags
   SectionSetFlags ${${SecName}} $AR_SecFlags
 
  "default_${SecName}:"
- ; The client is always selected by default
- ${If} ${SecName} == @CLIENT_COMPONENT_NAME@
-   SectionSetFlags ${${SecName}} 17
- ${EndIf}
 
  !insertmacro LoadSectionSelectedIntoVar ${SecName} ${SecName}_selected
 !macroend
@@ -370,7 +366,8 @@ Var PostInstallDialog
 Var DesktopClientCheckbox
 ;UTII Var DesktopServerCheckbox
 ;UTII Var ServerStartupCheckbox
-Var LaunchNowCheckbox
+Var LaunchServerNowCheckbox
+Var LaunchClientNowCheckbox
 Var CurrentOffset
 Var OffsetUnits
 Var CopyFromProductionCheckbox
@@ -436,17 +433,24 @@ Function PostInstallOptionsPage
 
 ;UTII  ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
 ;UTII    ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Launch @CONSOLE_HF_SHORTCUT_NAME@ after install"
-;UTII  ${Else}
-    ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Launch @INTERFACE_HF_SHORTCUT_NAME@ after install"
+;UTII    Pop $LaunchServerNowCheckbox
+
+;UTII    ; set the checkbox state depending on what is present in the registry
+;UTII    !insertmacro SetPostInstallOption $LaunchServerNowCheckbox @SERVER_LAUNCH_NOW_REG_KEY@ ${BST_CHECKED}
+
+;UTII    IntOp $CurrentOffset $CurrentOffset + 15
 ;UTII  ${EndIf}
 
-  Pop $LaunchNowCheckbox
+  ${If} ${SectionIsSelected} ${@CLIENT_COMPONENT_NAME@}
+	  ${NSD_CreateCheckbox} 0 $CurrentOffset$OffsetUnits 100% 10u "&Launch @INTERFACE_HF_SHORTCUT_NAME@ after install"
+	  Pop $LaunchClientNowCheckbox
 
-  ; set the checkbox state depending on what is present in the registry
-  !insertmacro SetPostInstallOption $LaunchNowCheckbox @LAUNCH_NOW_REG_KEY@ ${BST_CHECKED}
+	  ; set the checkbox state depending on what is present in the registry
+	  !insertmacro SetPostInstallOption $LaunchClientNowCheckbox @CLIENT_LAUNCH_NOW_REG_KEY@ ${BST_CHECKED}
+  ${EndIf}
 
   ${If} @PR_BUILD@ == 1
-    ; a PR build defaults all install options expect LaunchNowCheckbox and the settings copy to unchecked
+    ; a PR build defaults all install options expect LaunchServerNowCheckbox, LaunchClientNowCheckbox and the settings copy to unchecked
     ${If} ${SectionIsSelected} ${@CLIENT_COMPONENT_NAME@}
       ${NSD_SetState} $DesktopClientCheckbox ${BST_UNCHECKED}
     ${EndIf}
@@ -476,7 +480,8 @@ FunctionEnd
 Var DesktopClientState
 ;UTII Var DesktopServerState
 ;UTII Var ServerStartupState
-Var LaunchNowState
+Var LaunchServerNowState
+Var LaunchClientNowState
 Var CopyFromProductionState
 
 Function ReadPostInstallOptions
@@ -498,8 +503,15 @@ Function ReadPostInstallOptions
     ${NSD_GetState} $CopyFromProductionCheckbox $CopyFromProductionState
   ${EndIf}
 
-  ; check if we need to launch an application post-install
-  ${NSD_GetState} $LaunchNowCheckbox $LaunchNowState
+  ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
+	  ; check if we need to launch the server post-install
+	  ${NSD_GetState} $LaunchServerNowCheckbox $LaunchServerNowState
+  ${EndIf}
+
+  ${If} ${SectionIsSelected} ${@CLIENT_COMPONENT_NAME@}
+	  ; check if we need to launch the client post-install
+	  ${NSD_GetState} $LaunchClientNowCheckbox $LaunchClientNowState
+  ${EndIf}
 FunctionEnd
 
 Function HandlePostInstallOptions
@@ -570,19 +582,32 @@ Function HandlePostInstallOptions
     ${EndIf}
   ${EndIf}
 
-  ${If} $LaunchNowState == ${BST_CHECKED}
-    !insertmacro WritePostInstallOption @LAUNCH_NOW_REG_KEY@ YES
+;UTII  ${If} $LaunchServerNowState == ${BST_CHECKED}
+;UTII    !insertmacro WritePostInstallOption @SERVER_LAUNCH_NOW_REG_KEY@ YES
 
-    ; both launches use the explorer trick in case the user has elevated permissions for the installer
-    ; it won't be possible to use this approach if either application should be launched with a command line param
-;UTII    ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
-;UTII      Exec '"$WINDIR\explorer.exe" "$INSTDIR\@CONSOLE_INSTALL_SUBDIR@\@CONSOLE_WIN_EXEC_NAME@"'
+;UTII    ; both launches use the explorer trick in case the user has elevated permissions for the installer
+;UTII    ${If} $LaunchClientNowState == ${BST_CHECKED}
+;UTII      !insertmacro WritePostInstallOption @CLIENT_LAUNCH_NOW_REG_KEY@ YES
+;UTII      ; create shortcut with ARGUMENTS
+;UTII      CreateShortCut "$TEMP\SandboxShortcut.lnk" "$INSTDIR\@CONSOLE_INSTALL_SUBDIR@\@CONSOLE_WIN_EXEC_NAME@" "-- --launchInterface"
+;UTII      Exec '"$WINDIR\explorer.exe" "$TEMP\SandboxShortcut.lnk"'
 ;UTII    ${Else}
-      Exec '"$WINDIR\explorer.exe" "\"$INSTDIR\@INTERFACE_WIN_EXEC_NAME@\""'
+;UTII      !insertmacro WritePostInstallOption @CLIENT_LAUNCH_NOW_REG_KEY@ NO
+;UTII      Exec '"$WINDIR\explorer.exe" "$INSTDIR\@CONSOLE_INSTALL_SUBDIR@\@CONSOLE_WIN_EXEC_NAME@"'
 ;UTII    ${EndIf}
-  ${Else}
-    !insertmacro WritePostInstallOption @LAUNCH_NOW_REG_KEY@ NO
-  ${EndIf}
+
+;UTII  ${Else}
+;UTII    !insertmacro WritePostInstallOption @SERVER_LAUNCH_NOW_REG_KEY@ NO
+
+    ; launch uses the explorer trick in case the user has elevated permissions for the installer
+    ${If} $LaunchClientNowState == ${BST_CHECKED}
+      !insertmacro WritePostInstallOption @CLIENT_LAUNCH_NOW_REG_KEY@ YES
+      Exec '"$WINDIR\explorer.exe" "$INSTDIR\@INTERFACE_WIN_EXEC_NAME@"'
+    ${Else}
+      !insertmacro WritePostInstallOption @CLIENT_LAUNCH_NOW_REG_KEY@ NO
+    ${EndIf}
+
+;UTII  ${EndIf}
 FunctionEnd
 
 ;--------------------------------
@@ -609,17 +634,6 @@ Section "-Core installation"
   Delete "$INSTDIR\vccorlib120.dll"
   Delete "$INSTDIR\version"
   Delete "$INSTDIR\xinput1_3.dll"
-
-  ; The installer includes two different Qt audio plugins.
-  ; On Windows 8 and above, only qtaudio_wasapi.dll should be installed.
-  ; On Windows 7 and below, only qtaudio_windows.dll should be installed.
-  ${If} ${AtLeastWin8}
-    Delete "$INSTDIR\audio\qtaudio_windows.dll"
-    Delete "$INSTDIR\audio\qtaudio_windows.pdb"
-  ${Else}
-    Delete "$INSTDIR\audio\qtaudio_wasapi.dll"
-    Delete "$INSTDIR\audio\qtaudio_wasapi.pdb"
-  ${EndIf}
 
   ; Delete old desktop shortcuts before they were renamed during Sandbox rename
   Delete "$DESKTOP\@PRE_SANDBOX_INTERFACE_SHORTCUT_NAME@.lnk"
