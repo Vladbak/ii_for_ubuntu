@@ -756,7 +756,7 @@ QString AddressManager::getDomainId() const {
 }
 
 const QUrl AddressManager::getMetaverseServerUrl() const {
-    return NetworkingConstants::METAVERSE_SERVER_URL;
+    return NetworkingConstants::UTII_AUTH_SERVER_URL;
 }
 
 void AddressManager::handleShareableNameAPIResponse(QNetworkReply& requestReply) {

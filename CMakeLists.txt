@@ -26,7 +26,7 @@ endif ()
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "CMakeTargets")
 
-project(hifi)
+project(hifi-utii)
 add_definitions(-DGLM_FORCE_RADIANS)
 set(CMAKE_CXX_FLAGS_DEBUG  "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG")
 
