@@ -166,7 +166,6 @@ bool AudioInjector::injectLocally() {
 
             _localBuffer->open(QIODevice::ReadOnly);
             _localBuffer->setShouldLoop(_options.loop);
-            _localBuffer->setVolume(_options.volume);
 
             // give our current send position to the local buffer
             _localBuffer->setCurrentOffset(_currentSendOffset);
@@ -277,6 +276,12 @@ int64_t AudioInjector::injectNextFrame() {
             // pack our orientation for injected audio
             audioPacketStream.writeRawData(reinterpret_cast<const char*>(&_options.orientation),
                                            sizeof(_options.orientation));
+
+            audioPacketStream.writeRawData(reinterpret_cast<const char*>(&_options.position),
+                sizeof(_options.position));
+            glm::vec3 boxCorner = glm::vec3(0);
+            audioPacketStream.writeRawData(reinterpret_cast<const char*>(&boxCorner),
+                sizeof(glm::vec3));
 
             // pack zero for radius
             float radius = 0;

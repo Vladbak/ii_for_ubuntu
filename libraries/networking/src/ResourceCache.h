@@ -346,6 +346,8 @@ public:
     
     Resource(const QUrl& url);
     ~Resource();
+
+    virtual QString getType() const { return "Resource"; }
     
     /// Returns the key last used to identify this resource in the unused map.
     int getLRUKey() const { return _lruKey; }
@@ -465,6 +467,7 @@ private:
     bool isInScript() const { return _isInScript; }
     void setInScript(bool isInScript) { _isInScript = isInScript; }
     
+    int _requestID;
     ResourceRequest* _request{ nullptr };
     int _lruKey{ 0 };
     QTimer* _replyTimer{ nullptr };
