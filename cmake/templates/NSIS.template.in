@@ -503,10 +503,10 @@ Function ReadPostInstallOptions
     ${NSD_GetState} $CopyFromProductionCheckbox $CopyFromProductionState
   ${EndIf}
 
-  ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
-	  ; check if we need to launch the server post-install
-	  ${NSD_GetState} $LaunchServerNowCheckbox $LaunchServerNowState
-  ${EndIf}
+;UTII  ${If} ${SectionIsSelected} ${@SERVER_COMPONENT_NAME@}
+;UTII	  ; check if we need to launch the server post-install
+;UTII	  ${NSD_GetState} $LaunchServerNowCheckbox $LaunchServerNowState
+;UTII  ${EndIf}
 
   ${If} ${SectionIsSelected} ${@CLIENT_COMPONENT_NAME@}
 	  ; check if we need to launch the client post-install
