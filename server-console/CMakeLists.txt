@@ -1,3 +1,5 @@
+#utii removed this because we don't use it
+if (FALSE)
 set(TARGET_NAME packaged-server-console)
 
 if (PRODUCTION_BUILD)
@@ -72,3 +74,4 @@ else ()
   set_target_properties(${TARGET_NAME} PROPERTIES EXCLUDE_FROM_ALL TRUE EXCLUDE_FROM_DEFAULT_BUILD TRUE)
   set_target_properties(${TARGET_NAME}-npm-install PROPERTIES EXCLUDE_FROM_ALL TRUE EXCLUDE_FROM_DEFAULT_BUILD TRUE)
 endif ()
+endif()
